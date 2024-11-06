@@ -1,0 +1,8 @@
+.vscode
+numericalExperiments/birthdayRotation
+git-filer-repo
+*.jld2
+*.png
+*.gif
+*.pdf
+*.txt
