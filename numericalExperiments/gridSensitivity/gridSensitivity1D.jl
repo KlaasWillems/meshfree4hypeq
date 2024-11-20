@@ -63,7 +63,7 @@ function checkGridSensitivity()
                 res = Matrix{Int64}(undef, runs, 8)
                 eigs = Matrix{Complex}(undef, runs, 8)
                 for run = 1:runs
-                    r1, r2, _ = computeStability(interpConst, N, weightFunction, j, randomness)
+                    r1, r2, _ = computeStability(interpConst, N, weightFunction, run, randomness)
                     res[run, :] .= r1
                     eigs[run, :] .= r2
                     if mod(run, 10) == 0

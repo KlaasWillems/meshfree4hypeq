@@ -1,7 +1,6 @@
 using ProgressMeter
 using Plots
 using Random
-using Dierckx
 using LinearAlgebra
 using LaTeXStrings
 using Meshfree4ScalarEq.ScalarHyperbolicEquations
@@ -31,23 +30,10 @@ function mapGrid(x; xmin, xmax)
 end
 
 function computeError(particleGrid::ParticleGrid1D, initFunc::Function, time::Real, vel::Real; normP = 2)
-    # Compute exact solution
-    xsRegular = particleGrid.xmin:particleGrid.dx:particleGrid.xmax
-    xsRegularT = xsRegular .- vel*time  
-    xsRegularT = mapGrid(xsRegularT; xmin=particleGrid.xmin, xmax=particleGrid.xmax)
-    exactSolT = initFunc.(xsRegularT)  # Exact solution at t = time
-
-    # Interpolate solution on regular grid
-    rhos = collect(map(particle -> particle.rho, particleGrid.grid))
     xsIrregular = collect(map(particle -> particle.pos, particleGrid.grid))
-    push!(rhos, rhos[1])  # Add point at right boundary explicitly to array
-    push!(xsIrregular, particleGrid.xmax)
-
-    rhoSpline = Spline1D(xsIrregular, rhos; k=5, s=0.0, periodic=true)
-    numericalSol = evaluate(rhoSpline, xsRegular)
-
-    # Return absolute error
-    return norm(exactSolT - numericalSol, normP)/norm(exactSolT, normP)
+    numericalSol = collect(map(particle -> particle.rho, particleGrid.grid))
+    exactSol = [initFunc(mapGrid(x - vel*time, xmin=particleGrid.xmin, xmax=particleGrid.xmax)) for x in xsIrregular]
+    return norm(exactSol - numericalSol, normP)/norm(exactSol, normP)
 end
 
 const global a = 1.0;
@@ -227,7 +213,7 @@ function checkError(init::Integer)
     if (init == 1) || (init == 3)
         plot!(p2, Ns, 10 ./ Ns, label="Reference order 1", ls=:dash)
         plot!(p2, Ns, 50 ./ (Ns.^2), label="Reference order 2", ls=:dash)
-        plot!(p2, Ns, 100 ./ (Ns.^3), label="Reference order 3", ls=:dash)
+        # plot!(p2, Ns, 100 ./ (Ns.^3), label="Reference order 3", ls=:dash)
         plot!(p2, Ns, 1000 ./ (Ns.^4), label="Reference order 4", ls=:dash)
     elseif init == 2
         plot!(p2, Ns, 1 ./ sqrt.(Ns), label="Reference order 0.5", ls=:dash)

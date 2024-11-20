@@ -105,34 +105,42 @@ Enhanced MOOD criterion. Checks relaxed DMP for rho. This criterion relaxes the 
 mutable struct MOODu2 <: MOODCriterion 
     count::Int64
     deltaRelax::Bool
+    init::Bool
+    delta::Float64
     function MOODu2(;deltaRelax::Bool)
-        new(0, deltaRelax)
+        new(0, deltaRelax, false, 0.0)
     end
 end
 
 function (mood::MOODu2)(particleGrid::ParticleGridType, particleIndex::Integer, rhoVec::Vector{<:Real}, newRho::Real; firstStage::Bool=false)::Bool where {ParticleGridType <: ParticleGrid}
     # Prep
     minU, maxU = findLocalExtrema!(particleGrid, particleIndex, rhoVec)
-    d = maximum((particle.volume for particle in particleGrid.grid))
-    δ = mood.deltaRelax ? d : 0.0;
+
+    if !mood.init
+        d = maximum((particle.volume for particle in particleGrid.grid))
+        mood.delta = mood.deltaRelax ? d : 0.0
+        mood.init = true
+    end
 
     # DMP criterion
     DMPFail = (newRho < minU) || (newRho > maxU)
-    DMPFail = DMPFail && (abs(maxU - minU) < δ^3) ? false : DMPFail
+    DMPFail = DMPFail && (abs(maxU - minU) < mood.delta^3) ? false : DMPFail
     
     # u2 check
     if ParticleGridType == ParticleGrid1D
         mini, maxi, minxx, maxxx = findLocalExtremaAbs!(particleGrid, particleIndex, particleGrid.temp)  # particleGrid.temp contains the curvatures
-        u2 = (mini*maxi > -δ) && ((minxx/maxxx >= 1.0 - (minxx/maxxx)^(1/1)) || (maxxx < δ)) # True if criterion is satisfied, so no MOOD event
+        u2 = (mini*maxi > -mood.delta) && ((minxx/maxxx >= 1.0 - (minxx/maxxx)^(1/1)) || (maxxx < mood.delta)) # True if criterion is satisfied, so no MOOD event
     elseif ParticleGridType == ParticleGrid2D
         mini1, maxi1, minxx1, maxxx1, mini2, maxi2, minxx2, maxxx2 = findLocalExtremaAbs!(particleGrid, particleIndex, particleGrid.temp)  # particleGrid.temp contains the curvatures
-        u2x = (mini1*maxi1 > -δ) && ((minxx1/maxxx1 >= 1.0 - (minxx1/maxxx1)^(1/1)) || (maxxx1 < δ))
-        u2y = (mini2*maxi2 > -δ) && ((minxx2/maxxx2 >= 1.0 - (minxx2/maxxx2)^(1/1)) || (maxxx2 < δ))
+        u2x = (mini1*maxi1 > -mood.delta) && ((minxx1/maxxx1 >= 1/2) || (maxxx1 < mood.delta))
+        u2y = (mini2*maxi2 > -mood.delta) && ((minxx2/maxxx2 >= 1/2) || (maxxx2 < mood.delta))
         u2 = u2x && u2y
     end
     
     # If DMP criterion failed, check u2 criterion
     moodEvent = DMPFail ? !u2 : false
+
+    # Logging of MOOD events
     if firstStage
         if particleGrid.grid[particleIndex].moodEvent  # Check if there was at least one mood event in the previous stage 
             mood.count += 1

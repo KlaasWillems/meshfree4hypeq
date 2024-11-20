@@ -44,25 +44,24 @@ struct ParticleGrid1D <: ParticleGrid
 
         # Create grid
         grid = Vector{Particle1D}(undef, N)
-        grid[1] = Particle1D(xmin, 0.0, true)
         if singlePointPerturbation
-            for i = 2:N
+            for i = 1:N
                 if i == round(N/2)  # perturb center point
-                    pos = xmin + dx*(i-1) + randomness
+                    pos = xmin + dx*(i-0.5) + randomness
                 else
-                    pos = xmin + dx*(i-1)
+                    pos = xmin + dx*(i-0.5)
                 end
                 grid[i] = Particle1D(pos, 0.0, false)
             end
         else
             if randomness >= 0.0
-                for i = 2:N
-                    pos = xmin + dx*(i-1) + randomness*(rand(rng, Float64)*2 - 1)
-                    grid[i] = Particle1D(pos, 0.0, false)
+                @assert randomness <= 0.5*dx "Randomness too larger. Faulty grids could be generated."
+                for i = 1:N
+                    pos = xmin + dx*(i-0.5) + randomness*(rand(rng, Float64)*2 - 1)
+                    grid[i] = Particle1D(pos, 0.5, false)
                 end
-                @assert issorted(grid, by=particle->particle.pos) "Grid is not sorted, randomness is probably too high."
             else
-                for i = 2:N
+                for i = 1:N
                     pos = prevfloat(convert(Float64, xmax-xmin))*(1-rand(rng, Float64)) + xmin  # Random uniform number in (xmin, xmax)
                     grid[i] = Particle1D(pos, 0.0, false)
                 end
@@ -99,7 +98,6 @@ struct ParticleGrid1D <: ParticleGrid
     """
     function ParticleGrid1D(grid::Vector{Particle1D}, xmin::Real, xmax::Real, dx::Real, regular::Bool)
         @assert length(grid) >= 2
-        @assert grid[1].pos == xmin "Particle at left boundary should be at xmin to facilate computation of error."
         @assert issorted(grid, by=particle->particle.pos) "Grid is not sorted."
         @assert count(map(particle -> particle.boundary, grid)) == 1 "Only the leftmost particle is allowed to be a boundary particle."
         new(grid, convert(Float64, xmin), convert(Float64, xmax), length(grid), convert(Float64, dx), regular, Vector{Float64}(undef, length(grid)))
@@ -140,25 +138,12 @@ struct ParticleGrid2D <: ParticleGrid
         index = 1
         for i = 1:Nx
             for j = 1:Ny
-                if (i == 1) && (j == 1)
-                    boundary = true
-                    posX = xmin
-                    posY = ymin
-                elseif (i == 1)
-                    boundary = true
-                    posX = xmin
-                    posY = ymin + dy*(j-1) + randomness[2]*(rand(rng, Float64)*2 - 1)
-                elseif (j == 1)
-                    boundary = true
-                    posX = xmin + dx*(i-1) + randomness[1]*(rand(rng, Float64)*2 - 1)
-                    posY = ymin
-                else
-                    boundary = false
-                    posX = xmin + dx*(i-1) + randomness[1]*(rand(rng, Float64)*2 - 1)
-                    posY = ymin + dy*(j-1) + randomness[2]*(rand(rng, Float64)*2 - 1)
-                end
+                boundary = (i == 1) || (j == 1) ? true : false
+                posX = xmin + dx*(i-0.5) + randomness[1]*(rand(rng, Float64)*2 - 1) 
+                posY = ymin + dy*(j-0.5) + randomness[2]*(rand(rng, Float64)*2 - 1)
                 grid[index] = Particle2D((posX, posY), 0.0, boundary)
                 index += 1
+                @assert (xmin <= posX <= xmax) && (ymin <= posY <= ymax)
             end
         end
 
@@ -215,7 +200,7 @@ function getTimeStep(particleGrid::ParticleGrid2D, eq::LinearAdvection, interpAl
         A11 = A12 = A22 = 0.0
         for nbIndex in particle.neighbourIndices
             deltaX, deltaY = getPeriodicDistance(particleGrid, particleIndex, nbIndex)
-            w = exp(-interpAlpha*(deltaX^2 + deltaY^2))
+            w = exp(-interpAlpha*(deltaX^2 + deltaY^2)/(interpRange^2))
             A11 += w*(deltaX^2) 
             A12 += w*deltaX*deltaY
             A22 += w*(deltaY^2)
@@ -227,7 +212,7 @@ function getTimeStep(particleGrid::ParticleGrid2D, eq::LinearAdvection, interpAl
 
             # Solve 2x2 LS system
             deltaX, deltaY = getPeriodicDistance(particleGrid, particleIndex, nbIndex)
-            w = exp(-interpAlpha*(deltaX^2 + deltaY^2))
+            w = exp(-interpAlpha*(deltaX^2 + deltaY^2)/(interpRange^2))
             coeff = ((A22*w*deltaX - A12*w*deltaY)/D, (A11*w*deltaY - A12*w*deltaX)/D)
 
             # Compute adapted coefficients
@@ -240,7 +225,7 @@ function getTimeStep(particleGrid::ParticleGrid2D, eq::LinearAdvection, interpAl
             bracketMinus2 = betaBar*dot(eq.vel, s) > 0.0 ? 0.0 : betaBar*dot(eq.vel, s)
             sumCij -= alfaBar*bracketMinus + bracketMinus2
         end
-        dtMax = min(1/sumCij, dtMax)
+        dtMax = min(1/(2*sumCij), dtMax)
     end
     return dtMax
 end

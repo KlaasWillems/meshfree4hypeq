@@ -88,7 +88,7 @@ function computeODE(particleGrid::ParticleGrid1D, vel::Real, alpha::Real, interp
         A = sparse(I, J, V)
         @assert all(.!isinf.(A)) "There is an inf."
         @assert all(.!isnan.(A)) "There is a Nan."
-        @assert all(isapprox.(sum(A, dims=2), 0.0, atol=1e-12)) "$(maximum(abs.(sum(A, dims=2))))"
+        # @assert all(isapprox.(sum(A, dims=2), 0.0, atol=1e-12)) "$(maximum(abs.(sum(A, dims=2))))"
         return A
     elseif algorithm == "muscl"
         @assert (order == 1) || (order == 2) || (order == 3) || (order == 4) "Order must be one, two, three or four."

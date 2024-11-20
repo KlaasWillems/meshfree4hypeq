@@ -75,8 +75,12 @@ function computeError(j, N)
         method = RK3(CentralGradient(2), N, N)
     elseif j == 11
         randomness = (xmax-xmin)/(2*N)
-        interpRangeConst = 4.5
+        interpRangeConst = sqrt(5.0^2 + 3.0^2)+0.01
         method = RK3(DumbserWENO(2), N, N)
+    elseif j == 12
+        randomness = (xmax-xmin)/(2*N)
+        interpRangeConst = sqrt(5.0^2 + 3.0^2)+0.01
+        method = RK3(WENO(2), N, N)
     end
 
     # Copy state of RNG
@@ -118,7 +122,7 @@ end
 function testConvergence()
 
     Ns = trunc.(Int64, 10 .^ range(1.0, stop=2.8, length=8))
-    algs = [1; 2; 3; 4; 5; 6; 7; 8; 9; 10; 11]
+    algs = [1; 2; 3; 4; 5; 6; 7; 8; 9; 10; 11; 12]
 
     errs = Matrix{Float64}(undef, length(Ns), length(algs))
 
@@ -128,4 +132,21 @@ function testConvergence()
         end
     end
     
-    p1 = plot(Ns, errs[:, 1], label="MUSCL1 uniform grid (h=4.5dx)", legend=:bottomleft, xscale=:log10, yscale=:log10, ls=:solid, markershape=:circle, xlabel=L"N_x", ylabel="Absolute error", title="Mean err
+    p1 = plot(Ns, errs[:, 1], label="MUSCL1 uniform grid (h=4.5dx)", legend=:bottomleft, xscale=:log10, yscale=:log10, ls=:solid, markershape=:circle, xlabel=L"N_x", ylabel="Absolute error", title="Mean error on divergence", size=(900, 600))
+    plot!(p1, Ns, errs[:, 2], label="MUSCL1 irregular grid (h=4.5dx)", ls=:dashdot, markershape=:circle)
+    plot!(p1, Ns, errs[:, 3], label="MUSCL1 irregular grid (h=3.5dx)", ls=:dashdot, markershape=:circle)
+    plot!(p1, Ns, errs[:, 4], label="Central gradient 1 irregular grid (h=4.5dx)", ls=:solid, markershape=:star)
+    plot!(p1, Ns, errs[:, 5], label="Central gradient 1 uniform grid (h=4.5dx)", ls=:solid, markershape=:star)
+    plot!(p1, Ns, errs[:, 7], label="MUSCL2 irregular grid (h=4.5dx)", ls=:solid, markershape=:cross)
+    plot!(p1, Ns, errs[:, 8], label="MUSCL2 irregular grid (h=3.5dx)", ls=:solid, markershape=:cross)
+    plot!(p1, Ns, errs[:, 6], label="MUSCL2 uniform grid (h=4.5dx)", ls=:dashdot, markershape=:cross)
+    plot!(p1, Ns, errs[:, 9], label="Central gradient 2 irregular grid (h=4.5dx)", ls=:solid, markershape=:square)
+    plot!(p1, Ns, errs[:, 10], label="Central gradient 2 uniform grid (h=4.5dx)", ls=:solid, markershape=:square)
+    plot!(p1, Ns, errs[:, 11], label="DumbserWENO 2 irregular grid", ls=:solid, markershape=:square)
+    plot!(p1, Ns, errs[:, 12], label="WENO 2 irregular grid", ls=:solid, markershape=:square)
+    plot!(p1, Ns, 1 ./ Ns, ls=:dash, label="Order 1 reference")
+    plot!(p1, Ns, 5 ./ (Ns.^2), ls=:dash, label="Order 2 reference")
+    savefig(p1, "$(@__DIR__)/convergence2D.pdf")
+end
+
+testConvergence()

@@ -43,17 +43,17 @@ end
     
 function doSimulation(initFunc::String, AlgID::Integer, N::Integer, weightFunction::MLSWeightFunction, seed::Integer, interpRangeConst::Real)
     # Simulation settings
-    tmax = 20*sqrt(2)  # One loop along diagonal
+    tmax = 30*sqrt(2)  # One loop along diagonal
     xmin = -5
     xmax = 5
     saveDir = "$(@__DIR__)/data/"
     interpAlpha = 6.0
-    saveFreq = 5
+    saveFreq = 50
 
     rng = MersenneTwister(seed)
 
     # Simlation algorithms
-    CFL = 0.02
+    CFL = 0.1
     if AlgID == 1
         method = EulerUpwind(N, N; algType="Classic", weightFunction=weightFunction)
         saveDir *= "MeshfreeUpwindClassic"
@@ -135,7 +135,7 @@ function doSimulation(initFunc::String, AlgID::Integer, N::Integer, weightFuncti
         println("Plotting error $(e) in algorithm $(AlgID) with N = $(N), seed = $(seed)")
     end
 
-    # Only clean final grid
+    # Only keep final grid
     cleanDir(settings.saveDir)
 
     if failed
@@ -155,10 +155,10 @@ end
 end  # @everywhere
 
 function doDistributedSimulations()
-    interpConst = sqrt(5.0^2 + 2.5^2)
+    interpConst = sqrt(5.0^2 + 3.0^2)
     repeats = 100
-    labels = ["SS WENO 2"; "SS Upwind Classic 2"; "SS MUSCL 2"; "SS MUSCL 2 MOOD"; "SS DumbserWENO 2"]
-    simAlgs = [4; 5; 8; 9; 10]
+    labels = ["SS WENO 2"; "SS Upwind Classic 2"; "SS MUSCL 1"; "SS MUSCL 2"; "SS MUSCL 2 MOOD"; "SS DumbserWENO 2"]
+    simAlgs = [4; 5; 7; 8; 9; 10]
 
     Ns = [70 for _ in 1:repeats]
 

@@ -12,6 +12,7 @@ using Distributed
     using Meshfree4ScalarEq.Interpolations
     using Meshfree4ScalarEq.SimSettings
     using Meshfree4ScalarEq
+    using Profile
 
 function smoothInit(x::Real, y::Real)
     return exp(-x^2 - y^2)
@@ -29,7 +30,6 @@ function doSimluation(initFunc::String, AlgID::Integer, N::Integer, tmax::Real)
     xmax = 5
     interpAlpha = 6
     interpRangeConst = sqrt(5.0^2 + 3.0^2)
-    CFL = 1/40
 
     # Equation
     eq = LinearAdvection(a)
@@ -41,8 +41,8 @@ function doSimluation(initFunc::String, AlgID::Integer, N::Integer, tmax::Real)
     dx = (xmax-xmin)/N
     dy = (xmax-xmin)/N
     particleGrid = ParticleGrid2D(xmin, xmax, xmin, xmax, N, N; randomness = (dx/2, dy/2))  
-    dt = getTimeStep(particleGrid, eq, interpAlpha, interpRangeConst*dx)*CFL    
 
+    CFL = 0.5
     # Simlation algorithms
     if AlgID == 1
         method = EulerUpwind(N, N; algType="Praveen")
@@ -76,6 +76,8 @@ function doSimluation(initFunc::String, AlgID::Integer, N::Integer, tmax::Real)
         saveDir *= "RK3MOODMUSCL2"
     end
 
+    dt = getTimeStep(particleGrid, eq, interpAlpha, interpRangeConst*dx)*CFL    
+
     saveDir *= "_irgrid"
 
     # Initial condition
@@ -92,7 +94,7 @@ function doSimluation(initFunc::String, AlgID::Integer, N::Integer, tmax::Real)
     saveDir *= "_$(N)"
 
     # Create SimSettings object
-    saveFreq = 10000000
+    saveFreq = 10
     settings = SimSetting(  tmax=tmax,
                             dt=dt,
                             interpRange=interpRangeConst*particleGrid.dx,
@@ -102,7 +104,13 @@ function doSimluation(initFunc::String, AlgID::Integer, N::Integer, tmax::Real)
 
     # Do simulation
     time = mainTimeIntegrator!(method, eq, particleGrid, settings)
+
+    if hasproperty(method, :mood) && initFunc == "smoothInit"
+        println("$(settings.saveDir) moodRatio: $(method.mood.count/(N*N*tmax/dt))")
+    end
+
     plotDensity(settings, settings.currentSaveNb-1; saveFigure=true)
+    animateDensity(settings; saveFigure=true)
 
     # Return RNG state
     copy!(Meshfree4ScalarEq.rng, state)
@@ -134,12 +142,17 @@ function checkError()
     end
 
     tmax = 1.0
+    # Ns = [100]
+    # Algs = [10]
     Ns = [30; 50; 70; 100; 175; 250]
-    Algs = [1; 4; 5; 6; 7; 8; 10]
+    Algs = [1; 4; 5; 6; 8; 9; 10]
     
     params = [(initString, initFunc, Alg, N, tmax) for N in Ns for Alg in Algs]
     pmapRes = pmap(computeSimulationError, params)
     save("$(@__DIR__)/data/timingResults_$(initString).jld2", "pmapRes", pmapRes, "Ns", Ns, "Algs", Algs)
 end
+
+# computeSimulationError(("smoothInit", smoothInit, 10, 100, 0.00001))
+# @profview computeSimulationError(("smoothInit", smoothInit, 10, 250, 0.5))
 
 checkError()

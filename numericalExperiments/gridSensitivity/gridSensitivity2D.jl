@@ -71,7 +71,7 @@ end  # @everywhere
 
 function checkGridSensitivity()
     @assert length(ARGS) >= 2 "Give CLI arguments: amount of runs, Ni, Nj, ..."
-    interpConst = sqrt(5.0^2 + 2.5^2)
+    interpConst = sqrt(5.0^2 + 3.0^2)
     runs = parse(Int64, ARGS[1])
     
     # Ns

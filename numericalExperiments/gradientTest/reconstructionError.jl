@@ -51,13 +51,13 @@ function testConvergence()
         for config in configs
             err = Vector{Float64}(undef, length(particleGrid.grid))
             if (config == 1) || (config == 7)
-                initTimeStep(m1.gradientInterpolator, particleGrid, interpAlpha)  # MUSCL 1
+                initTimeStep(m1.gradientInterpolator, particleGrid, interpAlpha, interpConst*particleGrid.dx)  # MUSCL 1
             elseif (config == 2) || (config == 3) || (config == 8) || (config == 9)
-                initTimeStep(m2.gradientInterpolator, particleGrid, interpAlpha)  # MUSCL 2
+                initTimeStep(m2.gradientInterpolator, particleGrid, interpAlpha, interpConst*particleGrid.dx)  # MUSCL 2
             elseif (config == 4) || (config == 5) || (config == 6) || (config == 10) || (config == 11) || (config == 12)
-                initTimeStep(m3.gradientInterpolator, particleGrid, interpAlpha)  # MUSCL 3
+                initTimeStep(m3.gradientInterpolator, particleGrid, interpAlpha, interpConst*particleGrid.dx)  # MUSCL 3
             elseif (config == 13) || (config == 14)
-                initTimeStep(m4.gradientInterpolator, particleGrid, interpAlpha)  # MUSCL 4
+                initTimeStep(m4.gradientInterpolator, particleGrid, interpAlpha, interpConst*particleGrid.dx)  # MUSCL 4
             end
             for (particleIndex, particle) in enumerate(particleGrid.grid)
                 # Interpolate halfway to the first neighbour (fi1)

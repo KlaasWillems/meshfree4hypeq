@@ -80,7 +80,7 @@ function doSimluation(initFunc::String, AlgID::Integer, N::Integer, tmax::Real, 
     elseif AlgID == 3
         method = RalstonRK2(WENO(2), N)
         saveDir *= "RalstonWENO2"
-        dt = dtEuler*0.65  # 0.8 unstable
+        dt = dtEuler*0.7  # 0.45 unstable
     elseif AlgID == 4
         method = RalstonRK2(UpwindGradient(2), N; mood = MOODu2(deltaRelax=true))
         saveDir *= "RalstonRK2MOODUpwind2"
@@ -134,8 +134,8 @@ function doSimluation(initFunc::String, AlgID::Integer, N::Integer, tmax::Real, 
     return particleGrid, settings, time
 end
 
-function checkError(init::Integer)
-    SimRepeats = 10
+function checkError()
+    init = parse(Int64, ARGS[1])
 
     if init == 1
         initString = "smoothInit"
@@ -148,7 +148,7 @@ function checkError(init::Integer)
     end
 
     tmax = 7.5
-    Ns = [30; 50; 70; 100; 300; 500; 700; 1000; 1300; 1500]
+    Ns = [convert(Int64, round(10^x)) for x in range(log10(30), log10(1500), 10)]
     Algs = [1; 3; 4; 5; 6; 7; 8]
     AlgNames = ["MeshfreeUpwind1" "RK2 WENO2" "RK2MOOD Upwind2" "RK2MOOD MUSCL2" "RK4MOOD MUSCL4" "RK2 MUSCL2" "RK4 MUSCL4"]
     errors = Matrix{Float64}(undef, length(Ns), length(Algs))
@@ -161,11 +161,17 @@ function checkError(init::Integer)
                 println(e*" for algorithm $(Alg) and Nx=$(N).")
                 error("Stop here")
             end
+
+            SimRepeats = 10
+
             eN = Vector{Float64}(undef, SimRepeats)
             tN = Vector{Float64}(undef, SimRepeats)
 
             for k = 1:SimRepeats
                 particleGrid, settings, time = doSimluation(initString, Alg, N, tmax, k)
+                if Alg == 3
+                    println(maximum(map(particle -> particle.rho, particleGrid.grid)))
+                end
                 eN[k] = computeError(particleGrid, initFunc, tmax, a; normP = 2)
                 tN[k] = time
 
@@ -190,5 +196,4 @@ function checkError(init::Integer)
     save("$(@__DIR__)/data/efficiencyResults$(init).jld2", "timings", timings, "errors", errors, "AlgNames", AlgNames)
 end
 
-checkError(1)
-checkError(2)
+checkError()

@@ -20,9 +20,9 @@ end
 
 @everywhere begin
 
-const global labels = ["Upwind Classic: order 2" "MUSCL 2" "Upwind Classic: order 1"]
-const global algorithms = ["upwindClassic"; "muscl"; "upwindClassic"]
-const global orders = [2; 2; 1]
+const global labels = ["Upwind Classic: order 2" "MUSCL 2" "MUSCL 1" "Upwind Classic: order 1"]
+const global algorithms = ["upwindClassic"; "muscl"; "muscl"; "upwindClassic"]
+const global orders = [2; 2; 1; 1]
 
 function computeStabilities(saveName::String, stabilityCondition::Float64, N::Int64, interpRangeConst::Float64, weightFunction::MLSWeightFunction, seed::Integer)
     saveDir = "$(@__DIR__)/data/"
@@ -177,7 +177,7 @@ end
 end  # @everywhere
 
 function plotStabilityRegions()
-    interpRange = sqrt(5.0^2 + 2.5^2)
+    interpRange = sqrt(5.0^2 + 3.0^2)
     CFL = 0.25
 
     repeats = 100
@@ -196,8 +196,11 @@ function plotStabilityRegions()
     end
     save("$(@__DIR__)/data/eigenvalueStability.jld2", "results", results, "labels", labels)
     
-    computeStabilitiesPaper("eigenvaluesPaper_80", 1/8, 80, 3.5, exponentialWeightFunction(), 0.5, 10)
-    computeStabilitiesPaper("eigenvaluesPaper_80Uniform", 1/8, 80, 3.5, exponentialWeightFunction(), 0, 10)
+    # computeStabilitiesPaper("eigenvaluesPaper_80", 1/2, 70, interpRange, exponentialWeightFunction(), 0.5, 10)
+    # computeStabilitiesPaper("eigenvaluesPaper_80Uniform", 1/2, 70, interpRange, exponentialWeightFunction(), 0, 10)
 end
 
-plotStabilityRegions()
+computeStabilitiesPaper("eigenvaluesPaper_80", 1/2, 70, sqrt(5.0^2 + 3.0^2), exponentialWeightFunction(), 0.5, 10)
+computeStabilitiesPaper("eigenvaluesPaper_80Uniform", 1/2, 70, sqrt(5.0^2 + 3.0^2), exponentialWeightFunction(), 0, 10)
+
+# plotStabilityRegions()

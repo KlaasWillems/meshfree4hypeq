@@ -245,7 +245,7 @@ end
 
     # Cannot trust that particles on vertical and horizontal lines are put inside stencil due to numerical round-off. 
     # Range must be large enough such sufficient inner-stencil particles are considered.
-    interpRangeConst = (sqrt(5.0^2 + 2.5^2)+0.01) 
+    interpRangeConst = (sqrt(5.0^2 + 3.0^2)+0.01) 
 
 
     dx = (xmax - xmin)/N
