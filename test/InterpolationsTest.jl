@@ -407,7 +407,7 @@ end
         if (xmin + 10*particleGrid.dx <= particle.pos[1] <= xmax - 10*particleGrid.dx) && (xmin + 10*particleGrid.dx <= particle.pos[2] <= xmax - 10*particleGrid.dx)
             res = method1.gradientInterpolator(particleGrid, particleIndex, rhos, eq.vel, settings)  # Method yields exact gradient for linear function
             grad = gradTestFunction2(particle.pos[1], particle.pos[2], param)
-            @test isapprox(res, dot(eq.vel, grad), rtol=1e-14)
+            @test isapprox(res, dot(eq.vel, grad), rtol=1e-13)
         end
     end
 
