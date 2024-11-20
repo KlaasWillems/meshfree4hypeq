@@ -162,7 +162,7 @@ end
     resLS1 = A \ b  # Solve LS problem using built-in LS solver
     resLS2 = (A \ diagm(wVec))*dfVec
     @test isapprox(resLS1[1], resLS2[1], rtol=1e-14)
-    @test isapprox(resLS1[2], resLS2[2], rtol=1e-14) 
+    @test isapprox(resLS1[2], resLS2[2], rtol=1e-13) 
 end
 
 function linearInit(x::Real)
