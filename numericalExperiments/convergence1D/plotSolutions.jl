@@ -70,21 +70,21 @@ function plotSolutions(init::String)
     particleGrid1 = d["particleGrid"]
     rhos1 = map(particle -> particle.rho, particleGrid1.grid)
     pos1 = map(particle -> particle.pos, particleGrid1.grid)
-    plot!(p, pos1, rhos1, label="MUSCL4 + MOOD", c=:maroon1, legend=legendLoc, ls=:dash)
+    plot!(p, pos1, rhos1, label="MUSCL + MOOD: order 4", c=:maroon1, legend=legendLoc, ls=:dash)
     
     # Plot MUSCL 2
     d = load("$(@__DIR__)/data/$(algList[2])/data/step1.jld2")
     particleGrid2 = d["particleGrid"]
     rhos2 = map(particle -> particle.rho, particleGrid2.grid)
     pos2 = map(particle -> particle.pos, particleGrid2.grid)
-    plot!(p, pos2, rhos2, xlabel="x", ylabel=L"\rho", label="MUSCL2 + MOOD", c=:gold3, ls=:dashdot)
+    plot!(p, pos2, rhos2, xlabel="x", ylabel=L"\rho", label="MUSCL + MOOD: order 2", c=:gold3, ls=:dashdot)
     
     # Plot WENO 2
     d = load("$(@__DIR__)/data/$(algList[3])/data/step1.jld2")
     particleGrid3 = d["particleGrid"]
     rhos3 = map(particle -> particle.rho, particleGrid3.grid)
     pos3 = map(particle -> particle.pos, particleGrid3.grid)
-    plot!(p, pos3, rhos3, xlabel="x", ylabel=L"\rho", label="WENO2", c=:green, ls=:dashdotdot)
+    plot!(p, pos3, rhos3, xlabel="x", ylabel=L"\rho", label="WENO: order 2", c=:green, ls=:dashdotdot)
     
     # Plot MOOD Events
     plot!(p, [pos2[i] for i in eachindex(pos2) if particleGrid2.grid[i].moodEvent], [rhos2[i] for i in eachindex(pos2) if particleGrid2.grid[i].moodEvent], label="", markershape=:star5, lt=:scatter, c=:gold3, ms=ms)
