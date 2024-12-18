@@ -151,16 +151,16 @@ function computeStabilitiesPaper(saveName::String, stabilityCondition::Float64, 
 
     # Plotting of eigenvalues
     ms = 2
-    p1 = plot(real.(lambdas[1]*dt), imag.(lambdas[1]*dt), seriestype=:scatter, ylabel=L"Im(\lambda dt)", xlabel=L"Re(\lambda dt)", label=labels[1], ms=ms, aspect_ratio=:equal, framestyle=:origin)
+    p1 = plot(real.(lambdas[1]*dt), imag.(lambdas[1]*dt), seriestype=:scatter, ylabel=L"Im(\lambda dt)", xlabel=L"Re(\lambda dt)", label=labels[1], ms=ms, aspect_ratio=:equal, framestyle=:origin, legend=:bottomright)
     for i = 2:length(orders)
         plot!(p1, real.(lambdas[i]*dt), imag.(lambdas[i]*dt), label=labels[i], seriestype=:scatter, ms=ms)
     end
     
     # Add stability regions
-    xminPlot = -1.5
+    xminPlot = -2.0
     xmaxPlot = 0.4
-    yminPlot = -1.0
-    ymaxPlot = 1.0
+    yminPlot = -1.4
+    ymaxPlot = 1.4
     xs = range(xminPlot, xmaxPlot, length=200)
     ys = range(yminPlot, ymaxPlot, length=200)
     Z = xs' .+ ys*im
