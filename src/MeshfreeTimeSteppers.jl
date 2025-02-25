@@ -201,7 +201,7 @@ end
 function (euler::EulerUpwind)(eq::ScalarHyperbolicEquation, particleGrid::ParticleGrid, settings::SimSetting, time::Real, dt::Real)
     map!(particle -> particle.rho, euler.rhoOld, particleGrid.grid)
     for (particleIndex, particle) in enumerate(particleGrid.grid)
-        div = euler.upwind(particleGrid, particleIndex, euler.rhoOld, eq.vel, settings)
+        div = euler.upwind(particleGrid, particleIndex, euler.rhoOld, eq, settings)
         particle.rho = particle.rho - div*dt
     end
 end
@@ -231,17 +231,17 @@ function initTimeStepper(rk3::RK3, particleGrid::ParticleGrid, settings::SimSett
     initTimeStep(rk3.fallbackInterpolator, particleGrid, settings.interpAlpha, settings.interpRange)  # In case the fallbackInterpolator also starts populating the particle.alfaij fields, unpredictable things will start to happen.
 end
 
-function (rk3::RK3)(eq::LinearAdvection, particleGrid::ParticleGrid, settings::SimSetting, time::Real, dt::Real)
+function (rk3::RK3)(eq::ScalarHyperbolicEquation, particleGrid::ParticleGrid, settings::SimSetting, time::Real, dt::Real)
     # Fill stage 1
     map!(particle -> particle.rho, rk3.rhoInit, particleGrid.grid)
     copyCurvatures!(particleGrid)
 
     # Stage 2
     for (particleIndex, particle) in enumerate(particleGrid.grid)
-        rk3.div1[particleIndex] = rk3.gradientInterpolator(particleGrid, particleIndex, rk3.rhoInit, eq.vel, settings)
+        rk3.div1[particleIndex] = rk3.gradientInterpolator(particleGrid, particleIndex, rk3.rhoInit, eq, settings)
         particle.rho = rk3.rhoInit[particleIndex] - rk3.div1[particleIndex]*dt/2
         if rk3.mood(particleGrid, particleIndex, rk3.rhoInit, particle.rho; firstStage=true)
-            rk3.div1[particleIndex] = rk3.fallbackInterpolator(particleGrid, particleIndex, rk3.rhoInit, eq.vel, settings; setCurvature=false)
+            rk3.div1[particleIndex] = rk3.fallbackInterpolator(particleGrid, particleIndex, rk3.rhoInit, eq, settings; setCurvature=false)
             particle.rho = rk3.rhoInit[particleIndex] - rk3.div1[particleIndex]*dt/2  
         end
     end
@@ -250,10 +250,10 @@ function (rk3::RK3)(eq::LinearAdvection, particleGrid::ParticleGrid, settings::S
     map!(particle -> particle.rho, rk3.rhos, particleGrid.grid)
     copyCurvatures!(particleGrid)
     for (particleIndex, particle) in enumerate(particleGrid.grid)
-        rk3.div2[particleIndex] = rk3.gradientInterpolator(particleGrid, particleIndex, rk3.rhos, eq.vel, settings)
+        rk3.div2[particleIndex] = rk3.gradientInterpolator(particleGrid, particleIndex, rk3.rhos, eq, settings)
         particle.rho = rk3.rhoInit[particleIndex] - dt*(2*rk3.div2[particleIndex] - rk3.div1[particleIndex])
         if rk3.mood(particleGrid, particleIndex, rk3.rhos, particle.rho)
-            rk3.div2[particleIndex] = rk3.fallbackInterpolator(particleGrid, particleIndex, rk3.rhos, eq.vel, settings; setCurvature=false)
+            rk3.div2[particleIndex] = rk3.fallbackInterpolator(particleGrid, particleIndex, rk3.rhos, eq, settings; setCurvature=false)
             particle.rho = rk3.rhos[particleIndex] - dt*rk3.div2[particleIndex]  # FE step from previous stage
         end
     end
@@ -262,7 +262,7 @@ function (rk3::RK3)(eq::LinearAdvection, particleGrid::ParticleGrid, settings::S
     map!(particle -> particle.rho, rk3.rhos, particleGrid.grid)
     copyCurvatures!(particleGrid)
     for (particleIndex, particle) in enumerate(particleGrid.grid)
-        grad = rk3.gradientInterpolator(particleGrid, particleIndex, rk3.rhos, eq.vel, settings)
+        grad = rk3.gradientInterpolator(particleGrid, particleIndex, rk3.rhos, eq, settings)
         particle.rho = rk3.rhoInit[particleIndex] - dt*(rk3.div1[particleIndex]/6 + 2*rk3.div2[particleIndex]/3 + grad/6)
         if rk3.mood(particleGrid, particleIndex, rk3.rhos, particle.rho)
             particle.rho = rk3.rhos[particleIndex]  # FE step from previous stage, but the previous stage is also the solution at final time (c_3 = 1.0). 
@@ -295,10 +295,10 @@ function (ralston::RalstonRK2)(eq::ScalarHyperbolicEquation, particleGrid::Parti
     map!(particle -> particle.rho, ralston.rhoInit, particleGrid.grid)
     copyCurvatures!(particleGrid)
     for (particleIndex, particle) in enumerate(particleGrid.grid)
-        ralston.div1[particleIndex] = ralston.gradientInterpolator(particleGrid, particleIndex, ralston.rhoInit, eq.vel, settings)
+        ralston.div1[particleIndex] = ralston.gradientInterpolator(particleGrid, particleIndex, ralston.rhoInit, eq, settings)
         particle.rho = ralston.rhoInit[particleIndex] - ralston.div1[particleIndex]*dt*2/3
         if ralston.mood(particleGrid, particleIndex, ralston.rhoInit, particle.rho; firstStage=true)
-            ralston.div1[particleIndex] = ralston.fallbackInterpolator(particleGrid, particleIndex, ralston.rhoInit, eq.vel, settings; setCurvature=false)
+            ralston.div1[particleIndex] = ralston.fallbackInterpolator(particleGrid, particleIndex, ralston.rhoInit, eq, settings; setCurvature=false)
             particle.rho = ralston.rhoInit[particleIndex] - ralston.div1[particleIndex]*dt*2/3
         end
     end
@@ -307,10 +307,10 @@ function (ralston::RalstonRK2)(eq::ScalarHyperbolicEquation, particleGrid::Parti
     map!(particle -> particle.rho, ralston.rhos, particleGrid.grid)
     copyCurvatures!(particleGrid)
     for (particleIndex, particle) in enumerate(particleGrid.grid)
-        div = ralston.gradientInterpolator(particleGrid, particleIndex, ralston.rhos, eq.vel, settings)
+        div = ralston.gradientInterpolator(particleGrid, particleIndex, ralston.rhos, eq, settings)
         particle.rho = ralston.rhoInit[particleIndex] - dt*(ralston.div1[particleIndex]/4 + 3*div/4)
         if ralston.mood(particleGrid, particleIndex, ralston.rhos, particle.rho)
-            div = ralston.fallbackInterpolator(particleGrid, particleIndex, ralston.rhos, eq.vel, settings; setCurvature=false)
+            div = ralston.fallbackInterpolator(particleGrid, particleIndex, ralston.rhos, eq, settings; setCurvature=false)
             particle.rho = ralston.rhos[particleIndex] - dt*div/3
         end
     end
@@ -338,17 +338,17 @@ function initTimeStepper(rk4::RK4, particleGrid::ParticleGrid, settings::SimSett
     initTimeStep(rk4.fallbackInterpolator, particleGrid, settings.interpAlpha, settings.interpRange)  # In case the fallbackInterpolator also starts populating the particle.alfaij fields, unpredictable things will start to happen.
 end
 
-function (rk4::RK4)(eq::LinearAdvection, particleGrid::ParticleGrid, settings::SimSetting, time::Real, dt::Real)
+function (rk4::RK4)(eq::ScalarHyperbolicEquation, particleGrid::ParticleGrid, settings::SimSetting, time::Real, dt::Real)
     # Fill stage 1
     map!(particle -> particle.rho, rk4.rhoInit, particleGrid.grid)    
     copyCurvatures!(particleGrid)
 
     # Stage 2
     for (particleIndex, particle) in enumerate(particleGrid.grid)
-        rk4.div1[particleIndex] = rk4.gradientInterpolator(particleGrid, particleIndex, rk4.rhoInit, eq.vel, settings)
+        rk4.div1[particleIndex] = rk4.gradientInterpolator(particleGrid, particleIndex, rk4.rhoInit, eq, settings)
         particle.rho = rk4.rhoInit[particleIndex] - rk4.div1[particleIndex]*dt/2
         if rk4.mood(particleGrid, particleIndex, rk4.rhoInit, particle.rho; firstStage=true)
-            rk4.div1[particleIndex] = rk4.fallbackInterpolator(particleGrid, particleIndex, rk4.rhoInit, eq.vel, settings; setCurvature=false)
+            rk4.div1[particleIndex] = rk4.fallbackInterpolator(particleGrid, particleIndex, rk4.rhoInit, eq, settings; setCurvature=false)
             particle.rho = rk4.rhoInit[particleIndex] - rk4.div1[particleIndex]*dt/2  
         end
     end
@@ -357,10 +357,10 @@ function (rk4::RK4)(eq::LinearAdvection, particleGrid::ParticleGrid, settings::S
     map!(particle -> particle.rho, rk4.rhos, particleGrid.grid)
     copyCurvatures!(particleGrid)
     for (particleIndex, particle) in enumerate(particleGrid.grid)
-        rk4.div2[particleIndex] = rk4.gradientInterpolator(particleGrid, particleIndex, rk4.rhos, eq.vel, settings)
+        rk4.div2[particleIndex] = rk4.gradientInterpolator(particleGrid, particleIndex, rk4.rhos, eq, settings)
         particle.rho = rk4.rhoInit[particleIndex] - dt*rk4.div2[particleIndex]/2
         if rk4.mood(particleGrid, particleIndex, rk4.rhos, particle.rho)
-            rk4.div2[particleIndex] = rk4.fallbackInterpolator(particleGrid, particleIndex, rk4.rhos, eq.vel, settings; setCurvature=false)
+            rk4.div2[particleIndex] = rk4.fallbackInterpolator(particleGrid, particleIndex, rk4.rhos, eq, settings; setCurvature=false)
             particle.rho = rk4.rhoInit[particleIndex] - dt*rk4.div2[particleIndex]/2  
         end
     end
@@ -369,10 +369,10 @@ function (rk4::RK4)(eq::LinearAdvection, particleGrid::ParticleGrid, settings::S
     map!(particle -> particle.rho, rk4.rhos, particleGrid.grid)
     copyCurvatures!(particleGrid)
     for (particleIndex, particle) in enumerate(particleGrid.grid)
-        rk4.div3[particleIndex] = rk4.gradientInterpolator(particleGrid, particleIndex, rk4.rhos, eq.vel, settings)
+        rk4.div3[particleIndex] = rk4.gradientInterpolator(particleGrid, particleIndex, rk4.rhos, eq, settings)
         particle.rho = rk4.rhoInit[particleIndex] - dt*rk4.div3[particleIndex]
         if rk4.mood(particleGrid, particleIndex, rk4.rhos, particle.rho)
-            rk4.div3[particleIndex] = rk4.fallbackInterpolator(particleGrid, particleIndex, rk4.rhos, eq.vel, settings; setCurvature=false)
+            rk4.div3[particleIndex] = rk4.fallbackInterpolator(particleGrid, particleIndex, rk4.rhos, eq, settings; setCurvature=false)
             particle.rho = rk4.rhoInit[particleIndex] - dt*rk4.div3[particleIndex]
         end
     end
@@ -381,7 +381,7 @@ function (rk4::RK4)(eq::LinearAdvection, particleGrid::ParticleGrid, settings::S
     map!(particle -> particle.rho, rk4.rhos, particleGrid.grid)
     copyCurvatures!(particleGrid)
     for (particleIndex, particle) in enumerate(particleGrid.grid)
-        grad = rk4.gradientInterpolator(particleGrid, particleIndex, rk4.rhos, eq.vel, settings)
+        grad = rk4.gradientInterpolator(particleGrid, particleIndex, rk4.rhos, eq, settings)
         particle.rho = rk4.rhoInit[particleIndex] - dt*(rk4.div1[particleIndex]/6 + rk4.div2[particleIndex]/3 + rk4.div3[particleIndex]/3 + grad/6)
         if rk4.mood(particleGrid, particleIndex, rk4.rhos, particle.rho)
             particle.rho = rk4.rhos[particleIndex]  # Final stage is a solution at t^n+1 that satisfies the DMP

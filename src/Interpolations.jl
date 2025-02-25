@@ -4,6 +4,7 @@ using LinearAlgebra
 using Statistics
 using ..Meshfree4ScalarEq.ParticleGrids
 using ..Meshfree4ScalarEq.SimSettings
+using ..Meshfree4ScalarEq.ScalarHyperbolicEquations
 
 export functionInterpolation!, gradInterpolation!, setCurvatures!, GradientInterpolator, initTimeStep, UpwindGradient, CentralGradient, WENO, MUSCL, AxelMUSCL, DumbserWENO, MLSWeightFunction, inverseWeightFunction, exponentialWeightFunction, getStencil
 
@@ -240,7 +241,8 @@ struct UpwindGradient{Algorithm} <: GradientInterpolator where {Algorithm <: Upw
     end
 end
 
-function (upwind::UpwindGradient)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, vel::Real, settings::SimSetting; setCurvature::Bool=true)::Real
+function (upwind::UpwindGradient)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, eq::LinearAdvection{<:Real}, settings::SimSetting; setCurvature::Bool=true)::Real
+    vel = eq.vel
     dxVec = Vector{Float64}(undef, 0)
     dfVec = Vector{Float64}(undef, 0)
     for nbIndex in particleGrid.grid[particleIndex].neighbourIndices
@@ -261,7 +263,8 @@ function (upwind::UpwindGradient)(particleGrid::ParticleGrid1D, particleIndex::I
     return vel*upwind.res[1]/settings.interpRange
 end
 
-function (upwind::UpwindGradient{TiwariAlgorithm})(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec::Vector{<:Real}, vel::Tuple{Real, Real}, settings::SimSetting; setCurvature::Bool=true)::Real    
+function (upwind::UpwindGradient{TiwariAlgorithm})(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec::Vector{<:Real}, eq::LinearAdvection{Tuple{<:Real, <:Real}}, settings::SimSetting; setCurvature::Bool=true)::Real    
+    vel = eq.vel
     nbNeighbours = length(particleGrid.grid[particleIndex].neighbourIndices)
     dxVec = Vector{Float64}(undef, nbNeighbours)
     dyVec = Vector{Float64}(undef, nbNeighbours)
@@ -300,7 +303,8 @@ function (upwind::UpwindGradient{TiwariAlgorithm})(particleGrid::ParticleGrid2D,
     return ddx*vel[1] + ddy*vel[2]
 end
 
-function (upwind::UpwindGradient{ClassicAlgorithm})(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec::Vector{<:Real}, vel::Tuple{Real, Real}, settings::SimSetting; setCurvature::Bool=true)::Real    
+function (upwind::UpwindGradient{ClassicAlgorithm})(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec::Vector{<:Real}, eq::LinearAdvection{Tuple{<:Real, <:Real}}, settings::SimSetting; setCurvature::Bool=true)::Real    
+    vel = eq.vel
     dxVec = Vector{Float64}(undef, 0)
     dyVec = Vector{Float64}(undef, 0)
     dfVec = Vector{Float64}(undef, 0)    
@@ -326,9 +330,9 @@ function (upwind::UpwindGradient{ClassicAlgorithm})(particleGrid::ParticleGrid2D
     return vel[1]*upwind.res[1]/settings.interpRange + vel[2]*upwind.res[2]/settings.interpRange
 end
 
-function (upwind::UpwindGradient{PraveenAlgorithm})(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec::Vector{<:Real}, vel::Tuple{Real, Real}, settings::SimSetting; setCurvature::Bool=true)::Real    
+function (upwind::UpwindGradient{PraveenAlgorithm})(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec::Vector{<:Real}, eq::LinearAdvection{Tuple{<:Real, <:Real}}, settings::SimSetting; setCurvature::Bool=true)::Real    
     particle = particleGrid.grid[particleIndex]
-
+    vel = eq.vel
     if setCurvature
         particle.curvature[1] = 0.0
         particle.curvature[2] = 0.0
@@ -384,7 +388,7 @@ struct CentralGradient <: GradientInterpolator
     end
 end
 
-function (central::CentralGradient)(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec::AbstractArray{<:Real}, vel::Tuple{Real, Real}, settings::SimSetting; setCurvature::Bool=true)::Real
+function (central::CentralGradient)(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec::AbstractArray{<:Real}, eq::LinearAdvection{Tuple{<:Real, <:Real}}, settings::SimSetting; setCurvature::Bool=true)::Real
     Npts = length(particleGrid.grid[particleIndex].neighbourIndices)
     dxVec = Vector{Float64}(undef, Npts)
     dyVec = Vector{Float64}(undef, Npts)
@@ -409,10 +413,10 @@ function (central::CentralGradient)(particleGrid::ParticleGrid2D, particleIndex:
         particleGrid.grid[particleIndex].curvature[2] = central.res[4]/(particleGrid.dx^2)
     end
 
-    return vel[1]*central.res[1]/particleGrid.dx + vel[2]*central.res[2]/particleGrid.dx
+    return eq.vel[1]*central.res[1]/particleGrid.dx + eq.vel[2]*central.res[2]/particleGrid.dx
 end
 
-function (central::CentralGradient)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, vel::Real, settings::SimSetting; setCurvature::Bool=true)::Real
+function (central::CentralGradient)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, eq::LinearAdvection{<:Real}, settings::SimSetting; setCurvature::Bool=true)::Real
     Npts = length(particleGrid.grid[particleIndex].neighbourIndices)
     dxVec = Vector{Float64}(undef, Npts)
     dfVec = Vector{Float64}(undef, Npts)
@@ -433,7 +437,7 @@ function (central::CentralGradient)(particleGrid::ParticleGrid1D, particleIndex:
         particleGrid.grid[particleIndex].curvature = central.res[2]/(particleGrid.dx^2)
     end
 
-    return vel*central.res[1]/particleGrid.dx
+    return eq.vel*central.res[1]/particleGrid.dx
 end
 
 # ------------------------------- WENO -------------------------------
@@ -453,7 +457,7 @@ struct WENO <: GradientInterpolator
     end
 end
 
-function (weno::WENO)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, vel::Real, settings::SimSetting; setCurvature::Bool=true)::Real
+function (weno::WENO)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, eq::LinearAdvection{<:Real}, settings::SimSetting; setCurvature::Bool=true)::Real
     Npts = length(particleGrid.grid[particleIndex].neighbourIndices)
     dxVec = Vector{Float64}(undef, Npts)
     dfVec = Vector{Float64}(undef, Npts)
@@ -468,7 +472,7 @@ function (weno::WENO)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec
     wVec = weno.weightFunction(dxVec; param=settings.interpAlpha, normalisation=1.0)
 
     # One-sided stencil
-    if vel > 0.0
+    if eq.vel > 0.0
         # Left stencil
         gradInterpolation!(dxVec[leftWindow], wVec[leftWindow], dfVec[leftWindow], weno.res; order=weno.order)
     else
@@ -498,10 +502,10 @@ function (weno::WENO)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec
 
     res = resS1*ω_s + resC1*ω_c
     @assert !isnan(res) "$(weno.res), $(weno.res), $(betaS), $(betaC), $(ω_s), $(ω_c), $(dfVec)"
-    return res*vel
+    return res*eq.vel
 end
 
-function (weno::WENO)(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec::Vector{<:Real}, vel::Tuple{Real, Real}, settings::SimSetting; setCurvature::Bool=true)::Real
+function (weno::WENO)(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec::Vector{<:Real}, eq::LinearAdvection{Tuple{<:Real, <:Real}}, settings::SimSetting; setCurvature::Bool=true)::Real
     Npts = length(particleGrid.grid[particleIndex].neighbourIndices)
     dxVec = Vector{Float64}(undef, Npts)
     dyVec = Vector{Float64}(undef, Npts)
@@ -520,7 +524,7 @@ function (weno::WENO)(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec
     wVec = weno.weightFunction(dxVec, dyVec; param=settings.interpAlpha, normalisation=1.0)
 
     # One-sided stencil - Left & Right
-    if vel[1] > 0.0
+    if eq.vel[1] > 0.0
         # Left stencil
         gradInterpolation!(dxVec[leftWindow], dyVec[leftWindow], wVec[leftWindow], dfVec[leftWindow], weno.res; order=weno.order)
     else
@@ -535,7 +539,7 @@ function (weno::WENO)(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec
     
     # One-sided stencil - Up & Down
     wVec .= weno.weightFunction(dxVec, dyVec; param=settings.interpAlpha, normalisation=1.0)
-    if vel[2] < 0.0
+    if eq.vel[2] < 0.0
         # Top stencil
         gradInterpolation!(dxVec[topWindow], dyVec[topWindow], wVec[topWindow], dfVec[topWindow], weno.res; order=weno.order)
     else
@@ -574,7 +578,7 @@ function (weno::WENO)(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec
         particleGrid.grid[particleIndex].curvature[2] = wV*resVyy + wCy*resCyy
     end
 
-    return (wH*resHx + wCx*resCx)*vel[1] + (wV*resVy + wCy*resCy)*vel[2]
+    return (wH*resHx + wCx*resCx)*eq.vel[1] + (wV*resVy + wCy*resCy)*eq.vel[2]
 end
 
 
@@ -600,7 +604,7 @@ struct DumbserWENO <: GradientInterpolator
     end
 end
 
-function (weno::DumbserWENO)(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec::Vector{<:Real}, vel::Tuple{Real, Real}, settings::SimSetting; setCurvature::Bool=true)::Real
+function (weno::DumbserWENO)(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec::Vector{<:Real}, eq::LinearAdvection{Tuple{<:Real, <:Real}}, settings::SimSetting; setCurvature::Bool=true)::Real
     @assert settings.interpRange >= sqrt(5.0^2 + 3.0^2)*particleGrid.dx "Interpolation must be sufficiently larger, otherwise one cannot guarantee sufficient neighbours are found." 
     particle = particleGrid.grid[particleIndex]
     Npts = length(particle.neighbourIndices)
@@ -655,7 +659,7 @@ function (weno::DumbserWENO)(particleGrid::ParticleGrid2D, particleIndex::Intege
     res = 0.0
     
     for i in eachindex(weno.weights)  # Write out inner product
-        res += weno.weights[i]*(weno.gradients[1, i]*vel[1] + vel[2]*weno.gradients[2, i])
+        res += weno.weights[i]*(weno.gradients[1, i]*eq.vel[1] + eq.vel[2]*weno.gradients[2, i])
     end
     return res
 end
@@ -740,7 +744,7 @@ function initTimeStep(muscl::MUSCL, particleGrid::ParticleGrid1D, interpAlpha::R
     end
 end
 
-function (muscl::MUSCL)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, vel::Real, settings::SimSetting; setCurvature::Bool=true)::Real
+function (muscl::MUSCL)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, eq::ScalarHyperbolicEquation, settings::SimSetting; setCurvature::Bool=true)::Real
     particle = particleGrid.grid[particleIndex]
     div = 0.0
     for (index, nbIndex) in enumerate(particleGrid.grid[particleIndex].neighbourIndices)
@@ -749,7 +753,7 @@ function (muscl::MUSCL)(particleGrid::ParticleGrid1D, particleIndex::Integer, fV
 
         if muscl.order == 1
             # Linear reconstruction from particleIndex and neighbour at center point 
-            if vel*deltaPos > 0.0
+            if eq.vel*deltaPos > 0.0
                 fij = fVec[particleIndex] + 0.5*deltaPos*sum(particle.alfaij[i]*(fVec[k] - fVec[particleIndex]) for (i, k) in enumerate(particle.neighbourIndices))
             else
                 fij = fVec[nbIndex] - 0.5*deltaPos*sum(nbParticle.alfaij[i]*(fVec[k] - fVec[nbIndex]) for (i, k) in enumerate(nbParticle.neighbourIndices))
@@ -757,7 +761,7 @@ function (muscl::MUSCL)(particleGrid::ParticleGrid1D, particleIndex::Integer, fV
             div += particle.alfaij[index]*(fij - fVec[particleIndex])
         elseif muscl.order == 2
             # Quadratic reconstruction
-            if vel*deltaPos > 0.0
+            if eq.vel*deltaPos > 0.0
                 fij = fVec[particleIndex]
                 for (i, k) in enumerate(particle.neighbourIndices)
                     fij += (deltaPos*particle.alfaijBar[i]/2 + (deltaPos^2)*particle.betaij[i]/8)*(fVec[k] - fVec[particleIndex])
@@ -771,7 +775,7 @@ function (muscl::MUSCL)(particleGrid::ParticleGrid1D, particleIndex::Integer, fV
             div += particle.alfaijBar[index]*(fij - fVec[particleIndex])
         elseif muscl.order == 3
             # Cubic reconstruction
-            if vel*deltaPos > 0.0
+            if eq.vel*deltaPos > 0.0
                 fij = fVec[particleIndex] + 0.5*deltaPos*sum(particle.alfaijBar[i]*(fVec[k] - fVec[particleIndex]) for (i, k) in enumerate(particle.neighbourIndices))
                 fij += (deltaPos^2)*sum(particle.betaij[i]*(fVec[k] - fVec[particleIndex]) for (i, k) in enumerate(particle.neighbourIndices))/8
                 fij += (deltaPos^3)*sum(particle.alfaij[i]*(fVec[k] - fVec[particleIndex]) for (i, k) in enumerate(particle.neighbourIndices))/(6*8)
@@ -783,7 +787,7 @@ function (muscl::MUSCL)(particleGrid::ParticleGrid1D, particleIndex::Integer, fV
             div += particle.alfaijBar[index]*(fij - fVec[particleIndex])
         elseif muscl.order == 4
             # Quartic reconstruction
-            if vel*deltaPos > 0.0
+            if eq.vel*deltaPos > 0.0
                 fij = fVec[particleIndex]
                 for (i, k) in enumerate(particle.neighbourIndices)
                     fij += (deltaPos*particle.alfaijBar[i]/2 + (deltaPos^2)*particle.betaij[i]/8 + (deltaPos^3)*particle.alfaij[i]/(6*8) + (deltaPos^4)*particle.gammaij[i]/(24*(2^4)))*(fVec[k] - fVec[particleIndex])
@@ -804,7 +808,7 @@ function (muscl::MUSCL)(particleGrid::ParticleGrid1D, particleIndex::Integer, fV
     elseif setCurvature
         particle.curvature = sum(particle.betaij[i]*(fVec[nbIndex] - fVec[particleIndex]) for (i, nbIndex) in enumerate(particle.neighbourIndices))  # Central difference for second-derivative
     end
-    return 2*vel*div # Minus sign in front of the divergence taken into account in the time stepper routine
+    return 2*eq.vel*div # Minus sign in front of the divergence taken into account in the time stepper routine
 end
 
 function initTimeStep(muscl::MUSCL, particleGrid::ParticleGrid2D, interpAlpha::Real, interpRange::Real)
@@ -852,7 +856,7 @@ function initTimeStep(muscl::MUSCL, particleGrid::ParticleGrid2D, interpAlpha::R
     end
 end
 
-function (muscl::MUSCL)(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec::Vector{<:Real}, vel::Tuple{Real, Real}, settings::SimSetting; setCurvature::Bool=true)::Real
+function (muscl::MUSCL)(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec::Vector{<:Real}, eq::LinearAdvection{Tuple{<:Real, <:Real}}, settings::SimSetting; setCurvature::Bool=true)::Real
     particle = particleGrid.grid[particleIndex]
     div = 0.0
     for (index, nbIndex) in enumerate(particleGrid.grid[particleIndex].neighbourIndices)
@@ -860,7 +864,7 @@ function (muscl::MUSCL)(particleGrid::ParticleGrid2D, particleIndex::Integer, fV
         nbParticle = particleGrid.grid[nbIndex]
 
         if muscl.order == 1  # Linear reconstruction from particleIndex and neighbour at center point 
-            if vel[1]*deltaX + vel[2]*deltaY > 0.0
+            if eq.vel[1]*deltaX + eq.vel[2]*deltaY > 0.0
                 fij = fVec[particleIndex]
                 for (i, k) in enumerate(particle.neighbourIndices)
                     @inbounds fij += (deltaX*particle.alfaij[i] + deltaY*particle.betaij[i])*(fVec[k] - fVec[particleIndex])/2
@@ -873,9 +877,9 @@ function (muscl::MUSCL)(particleGrid::ParticleGrid2D, particleIndex::Integer, fV
                 end
                 # fij = fVec[nbIndex] - sum((deltaX*nbParticle.alfaij[i] + deltaY*nbParticle.betaij[i])*(fVec[k] - fVec[nbIndex]) for (i, k) in enumerate(nbParticle.neighbourIndices))/2
             end
-            div += particle.alfaij[index]*(fij - fVec[particleIndex])*vel[1] + particle.betaij[index]*(fij - fVec[particleIndex])*vel[2]
+            div += particle.alfaij[index]*(fij - fVec[particleIndex])*eq.vel[1] + particle.betaij[index]*(fij - fVec[particleIndex])*eq.vel[2]
         elseif muscl.order == 2  # Quadratic reconstruction from particleIndex and neighbour at center point
-            if deltaX*vel[1] + vel[2]*deltaY > 0.0
+            if deltaX*eq.vel[1] + eq.vel[2]*deltaY > 0.0
                 fij = fVec[particleIndex] 
                 for (i, k) in enumerate(particle.neighbourIndices)
                     @inbounds fij += (deltaX*particle.alfaij[i] + deltaY*particle.betaij[i])*(fVec[k] - fVec[particleIndex])/2
@@ -888,7 +892,7 @@ function (muscl::MUSCL)(particleGrid::ParticleGrid2D, particleIndex::Integer, fV
                     @inbounds fij += ((deltaX^2)*nbParticle.alfaijBar[i]/2 + (deltaY^2)*nbParticle.betaijBar[i]/2 + deltaX*deltaY*nbParticle.gammaij[i])*(fVec[k] - fVec[nbIndex])/4
                 end
             end
-            div += particle.alfaij[index]*(fij - fVec[particleIndex])*vel[1] + particle.betaij[index]*(fij - fVec[particleIndex])*vel[2]
+            div += particle.alfaij[index]*(fij - fVec[particleIndex])*eq.vel[1] + particle.betaij[index]*(fij - fVec[particleIndex])*eq.vel[2]
         end
     end
 
@@ -904,96 +908,6 @@ function (muscl::MUSCL)(particleGrid::ParticleGrid2D, particleIndex::Integer, fV
     return 2*div # Minus sign in front of the divergence taken into account in the time stepper routine
 end
 
-# TODO: AxelMUSCL doesn't work. Remove or debug.
-"""
-    AxelMUSCL <: GradientInterpolator
-
-Second order MUSCL scheme. Reconstruction at some point at constant radius. Divergence at center point computed using Gauss theorem.
-"""
-mutable struct AxelMUSCL <: GradientInterpolator
-    order::Int64
-    res::Vector{Float64}  # Result of gradient computation
-    weightFunction::MLSWeightFunction
-
-    function AxelMUSCL(order::Int64; weightFunction::MLSWeightFunction = exponentialWeightFunction())
-        new(order, Vector{Float64}(undef, order), weightFunction)
-    end
-end
-
-function initTimeStep(muscl::AxelMUSCL, particleGrid::ParticleGrid2D, interpAlpha::Real, interpRange::Real)
-    # Compute reconstruction for particle in each neighbourhood and store gradient coefficients
-    for (particleIndex, particle) in enumerate(particleGrid.grid)
-
-        for (i, nbIndex) in enumerate(particle.neighbourIndices)
-            deltaX, deltaY = getPeriodicDistance(particleGrid, particleIndex, nbIndex)
-            particle.dxVec[i] = deltaX
-            particle.dyVec[i] = deltaY
-            particle.wVec[i] = sqrt(deltaX^2 + deltaY^2)  # Use temporarily to find smallest distance
-            particle.alfaijBar[i] = atan(deltaY, deltaX)  # Store angle!
-            if particle.alfaijBar[i] < 0
-                particle.alfaijBar[i] += 2*pi
-            end
-        end
-
-        particle.betaijBar[1] = minimum(particle.wVec)/2  # Store alfa_i (point at which reconstruction takes place)
-
-        # Sort arrays according to increase theta
-        p = sortperm(particle.alfaijBar)
-        permute!(particle.dxVec, p)
-        permute!(particle.dyVec, p)
-        permute!(particle.alfaijBar, p)
-        permute!(particle.neighbourIndices, p)
-
-        # Solver least squares system
-        @. particle.wVec = muscl.weightFunction(particle.dxVec, particle.dyVec; param=interpAlpha, normalisation=particleGrid.dx)
-
-        A11 = A12 = A22 = 0.0
-        for (w, dx) in zip(particle.wVec, particle.dxVec)
-            A11 += w*(dx^2)
-        end
-        for (w, dy) in zip(particle.wVec, particle.dyVec)
-            A22 += w*(dy^2)
-        end
-        for (w, dx, dy) in zip(particle.wVec, particle.dxVec, particle.dyVec)
-            A12 += w*dx*dy
-        end
-        D = (A12^2) - A22*A11
-
-        for i in eachindex(particle.alfaij)
-            particle.alfaij[i] = (particle.wVec[i]*particle.dyVec[i]*A12 - A22*particle.wVec[i]*particle.dxVec[i])/D  # x-derivative
-            particle.betaij[i] = (-particle.wVec[i]*particle.dyVec[i]*A11 + A12*particle.wVec[i]*particle.dxVec[i])/D  # y-derivative
-            if i == 1  # Store delta theta's
-                particle.gammaij[i] = (particle.alfaijBar[2] + 2*pi - particle.alfaijBar[end])/2
-            elseif i == length(particle.alfaijBar)
-                particle.gammaij[i] = (particle.alfaijBar[1] + 2*pi - particle.alfaijBar[end-1])/2
-            else
-                particle.gammaij[i] = (particle.alfaijBar[i+1] - particle.alfaijBar[i-1])/2
-            end
-        end    
-    end
-end
-
-function (muscl::AxelMUSCL)(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec::Vector{<:Real}, vel::Tuple{Real, Real}, settings::SimSetting)::Real
-    particle = particleGrid.grid[particleIndex]
-    div = 0.0
-    alfai = particle.betaijBar[1]
-    for (index, nbIndex) in enumerate(particle.neighbourIndices)
-        nx = particle.dxVec[index]/sqrt(particle.dxVec[index]^2 + particle.dyVec[index]^2)
-        ny = particle.dyVec[index]/sqrt(particle.dxVec[index]^2 + particle.dyVec[index]^2)
-        
-        # Linear reconstruction from particleIndex and neighbour at center point 
-        inn = vel[1]*nx + vel[2]*ny
-        if inn > 0.0
-            fij = fVec[particleIndex] + alfai*sum((nx*particle.alfaij[i] + ny*particle.betaij[i])*(fVec[k] - fVec[particleIndex]) for (i, k) in enumerate(particle.neighbourIndices))
-        else
-            nbParticle = particleGrid.grid[nbIndex]
-            fij = fVec[nbIndex] + sum(((nx*alfai - particle.dxVec[index])*nbParticle.alfaij[i] + (ny*alfai - particle.dyVec[index])*nbParticle.betaij[i])*(fVec[k] - fVec[nbIndex]) for (i, k) in enumerate(nbParticle.neighbourIndices))
-        end
-        div += inn*fij*particle.gammaij[index]
-    end
-    return div/(2*pi)
-end
-
 """
     setCurvatures!(particleGrid::ParticleGrid, settings::SimSetting)
 
@@ -1001,19 +915,21 @@ Compute curvatures on whole grid using a central MLS method. Overwrites the part
 """
 function setCurvatures!(particleGrid::ParticleGrid1D, settings::SimSetting)
     central = CentralGradient(2)
+    eq = LinearAdvection(0.0)
     map!(particle -> particle.rho, particleGrid.temp, particleGrid.grid)
     for particleIndex in eachindex(particleGrid.grid)
-        central(particleGrid, particleIndex, particleGrid.temp, 0.0, settings)
+        central(particleGrid, particleIndex, particleGrid.temp, eq, settings)
     end
 end
 
 function setCurvatures!(particleGrid::ParticleGrid2D, settings::SimSetting)
+    eq = LinearAdvection((0.0, 0.0))
     central = CentralGradient(2)
     for particleIndex in eachindex(particleGrid.grid)  # Use first column of particleGrid.temp as temporary
         particleGrid.temp[particleIndex, 1] = particleGrid.grid[particleIndex].rho
     end
     for particleIndex in eachindex(particleGrid.grid)
-        central(particleGrid, particleIndex, @view(particleGrid.temp[:, 1]), (0.0, 0.0), settings)
+        central(particleGrid, particleIndex, @view(particleGrid.temp[:, 1]), eq, settings)
     end
 end
 
