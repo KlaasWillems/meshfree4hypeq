@@ -1,3 +1,5 @@
+export Upwind, LaxFriedrich
+
 struct Upwind <: FixedGridTimeStepper 
     rhoOld::Vector{Float64}
     function Upwind(Nx::Integer)
@@ -7,7 +9,7 @@ end
 
 function (upwind::Upwind)(eq::LinearAdvection, particleGrid::ParticleGrid1D, settings::SimSetting, time::Real, dt::Real)
     map!(particle -> particle.rho, upwind.rhoOld, particleGrid.grid)
-    vel = velocity(eq, particleGrid.grid[1].rho, particleGrid.grid[1].pos, time)  # Velocity is constant so just evaluate it at the first particle
+    vel = velocity(eq, particleGrid.grid[1].rho)  # Velocity is constant so just evaluate it at the first particle
     λ = vel*dt/particleGrid.dx
     if vel > 0
         particleGrid.grid[1].rho -= λ*(upwind.rhoOld[1] - upwind.rhoOld[end])
@@ -39,6 +41,6 @@ function (lf::LaxFriedrich)(eq::ScalarHyperbolicEquation, particleGrid::Particle
     for i in 2:particleGrid.N-1
         particleGrid.grid[i].rho = 0.5*(lf.rhoOld[i+1] + lf.rhoOld[i-1]) -λ*(flux(eq, lf.rhoOld[i+1]) - flux(eq, lf.rhoOld[i-1]))
     end
-    particleGrid.grid[particleGrid.N].rho = 0.5*(lf.rhoOld[1] + lf.rhoOld[particleGrid.N-1]) -λ*(flux(eq, lf.rhoOld[1]) - flux(eq, lf.rhoOld[particleGrid.N-1]))
-    particleGrid.grid[i].rho = 0.5*(lf.rhoOld[i+1] + lf.rhoOld[i-1]) -λ*(flux(eq, lf.rhoOld[i+1]) - flux(eq, lf.rhoOld[i-1]))
+    particleGrid.grid[end].rho = 0.5*(lf.rhoOld[1] + lf.rhoOld[end-1]) -λ*(flux(eq, lf.rhoOld[1]) - flux(eq, lf.rhoOld[end-1]))
+    particleGrid.grid[1].rho = 0.5*(lf.rhoOld[2] + lf.rhoOld[end]) -λ*(flux(eq, lf.rhoOld[2]) - flux(eq, lf.rhoOld[end]))
 end

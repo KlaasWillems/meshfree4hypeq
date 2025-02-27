@@ -14,10 +14,6 @@ abstract type ScalarHyperbolicEquation end
 abstract type LinearScalarHyperbolicEquation <: ScalarHyperbolicEquation end
 abstract type NonLinearScalarHyperbolicEquation <: ScalarHyperbolicEquation end
 
-function (eq::ScalarHyperbolicEquation)(rho::Real, x::Real, t::Real)
-    error("Not implemented.")
-end
-
 struct LinearAdvection{T} <: LinearScalarHyperbolicEquation
     vel::T
 
@@ -30,22 +26,22 @@ struct LinearAdvection{T} <: LinearScalarHyperbolicEquation
     end
 end
 
-function velocity(eq::LinearAdvection, rho::Real, x::Real, t::Real)
+@inline function velocity(eq::LinearAdvection, rho::Real)
     return eq.vel
 end
 
-function flux(eq::LinearAdvection, u::Real)
+@inline function flux(eq::LinearAdvection, u::Real)
     return eq.vel*u
 end
 
 struct BurgersEquation <: NonLinearScalarHyperbolicEquation end
 
-function velocity(eq::BurgersEquation, rho::Real, x::Real, t::Real)
-    return rho
+@inline function velocity(eq::BurgersEquation, u::Real)
+    return u
 end
 
-function flux(eq::BurgersEquation, u::Real)
-    return (rho^2)/2
+@inline function flux(eq::BurgersEquation, u::Real)
+    return (u^2)/2
 end
 
 

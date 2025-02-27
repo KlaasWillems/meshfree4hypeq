@@ -5,6 +5,7 @@ using Statistics
 using ..Meshfree4ScalarEq.ParticleGrids
 using ..Meshfree4ScalarEq.SimSettings
 using ..Meshfree4ScalarEq.ScalarHyperbolicEquations
+using ..Meshfree4ScalarEq.FluxFunctions
 
 export functionInterpolation!, gradInterpolation!, setCurvatures!, GradientInterpolator, initTimeStep, UpwindGradient, CentralGradient, WENO, MUSCL, AxelMUSCL, DumbserWENO, MLSWeightFunction, inverseWeightFunction, exponentialWeightFunction, getStencil
 
@@ -241,8 +242,8 @@ struct UpwindGradient{Algorithm} <: GradientInterpolator where {Algorithm <: Upw
     end
 end
 
-function (upwind::UpwindGradient)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, eq::LinearAdvection{<:Real}, settings::SimSetting; setCurvature::Bool=true)::Real
-    vel = eq.vel
+function (upwind::UpwindGradient)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, eq::ScalarHyperbolicEquation, settings::SimSetting; setCurvature::Bool=true)::Real
+    vel = velocity(eq, fVec[particleIndex])
     dxVec = Vector{Float64}(undef, 0)
     dfVec = Vector{Float64}(undef, 0)
     for nbIndex in particleGrid.grid[particleIndex].neighbourIndices
@@ -666,23 +667,38 @@ end
 
 
 # ------------------------------- MUSCL -------------------------------
+
+abstract type MUSCLORDER end
+struct MUSCLORDER1 <: MUSCLORDER end
+struct MUSCLORDER2 <: MUSCLORDER end
+struct MUSCLORDER3 <: MUSCLORDER end
+struct MUSCLORDER4 <: MUSCLORDER end
 """
     MUSCL <: GradientInterpolator
 
 Central reconstruction of any order with upwinding.
 """
-mutable struct MUSCL <: GradientInterpolator
-    order::Int64
+mutable struct MUSCL{ORDER<:MUSCLORDER} <: GradientInterpolator
+    order::ORDER
     res::Vector{Float64}  # Result of gradient computation
     weightFunction::MLSWeightFunction
+    numericalFlux::NumericalFluxFunction
 
-    function MUSCL(order::Int64; weightFunction::MLSWeightFunction = exponentialWeightFunction())
+    function MUSCL(order::Int64; weightFunction::MLSWeightFunction = exponentialWeightFunction(), numericalFlux::NumericalFluxFunction = RusanovFlux())
         @assert (order == 1) || (order == 2) || (order == 3) || (order == 4) "Order must be one, two, three or four."
-        new(order, Vector{Float64}(undef, order), weightFunction)
+        if order == 1
+            new{MUSCLORDER1}(MUSCLORDER1(), Vector{Float64}(undef, order), weightFunction, numericalFlux)
+        elseif order == 2
+            new{MUSCLORDER2}(MUSCLORDER2(), Vector{Float64}(undef, order), weightFunction, numericalFlux)
+        elseif order == 3
+            new{MUSCLORDER3}(MUSCLORDER3(), Vector{Float64}(undef, order), weightFunction, numericalFlux)
+        elseif order == 4
+            new{MUSCLORDER4}(MUSCLORDER4(), Vector{Float64}(undef, order), weightFunction, numericalFlux)
+        end
     end
 end
 
-function initTimeStep(muscl::MUSCL, particleGrid::ParticleGrid1D, interpAlpha::Real, interpRange::Real)
+function initTimeStep(muscl::MUSCL{ORDER}, particleGrid::ParticleGrid1D, interpAlpha::Real, interpRange::Real) where {ORDER <: MUSCLORDER}
     # Compute reconstruction for particle in each neighbourhood and store gradient coefficients
     for (particleIndex, particle) in enumerate(particleGrid.grid)
 
@@ -692,12 +708,11 @@ function initTimeStep(muscl::MUSCL, particleGrid::ParticleGrid1D, interpAlpha::R
         end
         particle.wVec .= muscl.weightFunction(particle.dxVec; param=interpAlpha, normalisation=particleGrid.dx)
 
-        if muscl.order == 1
+        if ORDER == MUSCLORDER1
             @. particle.wVec = particle.wVec * particle.dxVec  # wVec .= dx .* wVec
             t = dot(particle.wVec, particle.dxVec)
             @. particle.alfaij = particle.wVec / t  # Derivative
-        elseif muscl.order == 2
-
+        elseif ORDER == MUSCLORDER2
             # alfa_ij
             @. particle.wVec = particle.wVec * particle.dxVec  # wVec .= dx .* wVec
             t = dot(particle.wVec, particle.dxVec)
@@ -719,7 +734,7 @@ function initTimeStep(muscl::MUSCL, particleGrid::ParticleGrid1D, interpAlpha::R
                 particle.alfaijBar[i] = (A22*particle.wVec[i]*particle.dxVec[i] - 0.5*A12*particle.wVec[i]*(particle.dxVec[i]^2))/D  # Derivative
                 particle.betaij[i] = (0.5*A11*particle.wVec[i]*(particle.dxVec[i]^2) - A12*particle.wVec[i]*particle.dxVec[i])/D  # Second derivative
             end
-        elseif muscl.order == 3
+        elseif ORDER == MUSCLORDER3
             @. particle.A[:, 1] = particle.dxVec * particle.wVec 
             @. particle.A[:, 2] = (particle.dxVec^2) * particle.wVec / 2
             @. particle.A[:, 3] = (particle.dxVec^3) * particle.wVec / 6
@@ -728,7 +743,7 @@ function initTimeStep(muscl::MUSCL, particleGrid::ParticleGrid1D, interpAlpha::R
             @. particle.alfaijBar = coeff[1, :] * particle.wVec  # Derivative
             @. particle.betaij = coeff[2, :] * particle.wVec  # Second derivative
             @. particle.alfaij = coeff[3, :] * particle.wVec  # Third derivative
-        elseif muscl.order == 4
+        elseif ORDER == MUSCLORDER4
             particle.wVec .= muscl.weightFunction(particle.dxVec; param=interpAlpha, normalisation=1.0)
             @. particle.A[:, 1] = particle.dxVec * particle.wVec 
             @. particle.A[:, 2] = (particle.dxVec^2) * particle.wVec / 2
@@ -744,14 +759,27 @@ function initTimeStep(muscl::MUSCL, particleGrid::ParticleGrid1D, interpAlpha::R
     end
 end
 
-function (muscl::MUSCL)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, eq::ScalarHyperbolicEquation, settings::SimSetting; setCurvature::Bool=true)::Real
+"""
+    sortFlux(flux1::Real, flux2::Real, deltaPos::Real)::Tuple{<:Real, <:Real}
+
+Given a reconstruction of the flux at the midpoint from the cell center flux1, and a flux reconstruction from the neighbouring point, return the left and right flux based on the relative orientation of the points.
+"""
+function sortFlux(flux1::Real, flux2::Real, deltaPos::Real)::Tuple{<:Real, <:Real}
+    if deltaPos > 0.0
+        return (flux1, flux2)  # left state, right state
+    else
+        return (flux2, flux1)
+    end
+end
+
+function (muscl::MUSCL{ORDER})(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, eq::ScalarHyperbolicEquation, settings::SimSetting; setCurvature::Bool=true)::Real where {ORDER<:MUSCLORDER}
     particle = particleGrid.grid[particleIndex]
     div = 0.0
     for (index, nbIndex) in enumerate(particleGrid.grid[particleIndex].neighbourIndices)
         deltaPos = getPeriodicDistance(particleGrid, particleIndex, nbIndex)
         nbParticle = particleGrid.grid[nbIndex]
 
-        if muscl.order == 1
+        if ORDER == MUSCLORDER1
             # Linear reconstruction from particleIndex and neighbour at center point 
             if eq.vel*deltaPos > 0.0
                 fij = fVec[particleIndex] + 0.5*deltaPos*sum(particle.alfaij[i]*(fVec[k] - fVec[particleIndex]) for (i, k) in enumerate(particle.neighbourIndices))
@@ -759,21 +787,19 @@ function (muscl::MUSCL)(particleGrid::ParticleGrid1D, particleIndex::Integer, fV
                 fij = fVec[nbIndex] - 0.5*deltaPos*sum(nbParticle.alfaij[i]*(fVec[k] - fVec[nbIndex]) for (i, k) in enumerate(nbParticle.neighbourIndices))
             end
             div += particle.alfaij[index]*(fij - fVec[particleIndex])
-        elseif muscl.order == 2
+        elseif ORDER == MUSCLORDER2
             # Quadratic reconstruction
-            if eq.vel*deltaPos > 0.0
-                fij = fVec[particleIndex]
-                for (i, k) in enumerate(particle.neighbourIndices)
-                    fij += (deltaPos*particle.alfaijBar[i]/2 + (deltaPos^2)*particle.betaij[i]/8)*(fVec[k] - fVec[particleIndex])
-                end
-            else
-                fij = fVec[nbIndex]
-                for (i, k) in enumerate(nbParticle.neighbourIndices)
-                    fij += (-deltaPos*nbParticle.alfaijBar[i]/2 + (deltaPos^2)*nbParticle.betaij[i]/8)*(fVec[k] - fVec[nbIndex])
-                end
+            fij = fVec[particleIndex]
+            for (i, k) in enumerate(particle.neighbourIndices)
+                fij += (deltaPos*particle.alfaijBar[i]/2 + (deltaPos^2)*particle.betaij[i]/8)*(fVec[k] - fVec[particleIndex])
             end
-            div += particle.alfaijBar[index]*(fij - fVec[particleIndex])
-        elseif muscl.order == 3
+            fji = fVec[nbIndex]
+            for (i, k) in enumerate(nbParticle.neighbourIndices)
+                fji += (-deltaPos*nbParticle.alfaijBar[i]/2 + (deltaPos^2)*nbParticle.betaij[i]/8)*(fVec[k] - fVec[nbIndex])
+            end
+            fm, fp = sortFlux(fij, fji, deltaPos)
+            div += particle.alfaijBar[index]*(muscl.numericalFlux(fm, fp, eq) - flux(eq, fVec[particleIndex]))
+        elseif ORDER == MUSCLORDER3
             # Cubic reconstruction
             if eq.vel*deltaPos > 0.0
                 fij = fVec[particleIndex] + 0.5*deltaPos*sum(particle.alfaijBar[i]*(fVec[k] - fVec[particleIndex]) for (i, k) in enumerate(particle.neighbourIndices))
@@ -785,7 +811,7 @@ function (muscl::MUSCL)(particleGrid::ParticleGrid1D, particleIndex::Integer, fV
                 fij -= (deltaPos^3)*sum(nbParticle.alfaij[i]*(fVec[k] - fVec[nbIndex]) for (i, k) in enumerate(nbParticle.neighbourIndices))/(6*8)
             end
             div += particle.alfaijBar[index]*(fij - fVec[particleIndex])
-        elseif muscl.order == 4
+        elseif ORDER == MUSCLORDER4
             # Quartic reconstruction
             if eq.vel*deltaPos > 0.0
                 fij = fVec[particleIndex]
@@ -808,7 +834,8 @@ function (muscl::MUSCL)(particleGrid::ParticleGrid1D, particleIndex::Integer, fV
     elseif setCurvature
         particle.curvature = sum(particle.betaij[i]*(fVec[nbIndex] - fVec[particleIndex]) for (i, nbIndex) in enumerate(particle.neighbourIndices))  # Central difference for second-derivative
     end
-    return 2*eq.vel*div # Minus sign in front of the divergence taken into account in the time stepper routine
+    # return 2*eq.vel*div # Minus sign in front of the divergence taken into account in the time stepper routine
+    return 2*div # Minus sign in front of the divergence taken into account in the time stepper routine
 end
 
 function initTimeStep(muscl::MUSCL, particleGrid::ParticleGrid2D, interpAlpha::Real, interpRange::Real)

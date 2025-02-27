@@ -586,6 +586,7 @@ function animateDensity(settings::SimSetting; saveFigure::Union{Bool, String}=fa
     nbSaveSteps = length(filter(x->contains(x, "step"), readdir(settings.saveDir*"data")))
     particleGrid0 = load(settings.saveDir*"data/step0.jld2")["particleGrid"]
     m0 = sum((particle.rho*particle.volume for particle in particleGrid0.grid))
+    titlefontsize = 10
     if particleGrid0 isa ParticleGrid1D
         for saveNb = 0:nbSaveSteps-1
             d = load(settings.saveDir*"data/step$(saveNb).jld2");
@@ -595,8 +596,8 @@ function animateDensity(settings::SimSetting; saveFigure::Union{Bool, String}=fa
             min1 = minimum(rho)
             max1 = maximum(rho)    
             mass = sum((particle.rho*particle.volume for particle in particleGrid.grid))
-            title = @sprintf("Time: %.1f, (min, max) = (%.3E, %.3E), mass = %.3E", d["time"], min1, max1, mass/m0)
-            rhoPlt = plot(pos, rho, xlabel="x", ylabel=L"\rho", legend=false, title=title)
+            title = @sprintf("Time: %.2f, extrema = (%.2E, %.2E), mass = %.2E", d["time"], min1, max1, mass/m0)
+            rhoPlt = plot(pos, rho, xlabel="x", ylabel=L"\rho", legend=false, title=title, titlefontsize=titlefontsize)
             if showMOODEvents
                 plot!(rhoPlt, [pos[i] for i in eachindex(pos) if particleGrid.grid[i].moodEvent], [rho[i] for i in eachindex(pos) if particleGrid.grid[i].moodEvent], label="", markershape=:star5, lt=:scatter)
             end
@@ -617,8 +618,8 @@ function animateDensity(settings::SimSetting; saveFigure::Union{Bool, String}=fa
             min1 = minimum(rhos)
             max1 = maximum(rhos)    
             mass = sum((particle.rho*particle.volume for particle in particleGrid.grid))
-            title = @sprintf("Time: %.1f, (min, max) = (%.3E, %.3E), mass = %.3E", time, min1, max1, mass/m0)
-            rhoPlt = scatter(posX, posY, zcolor=rhos, size=(800, 800), ms=ms, colormap=:turbo, clim=(min, max), title=title)
+            title = @sprintf("Time: %.2f, extrema = (%.2E, %.2E), mass = %.2E", time, min1, max1, mass/m0)
+            rhoPlt = scatter(posX, posY, zcolor=rhos, size=(800, 800), ms=ms, colormap=:turbo, clim=(min, max), title=title, titlefontsize=titlefontsize)
             frame(rhoAni, rhoPlt)
         end
     else
