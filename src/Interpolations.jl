@@ -9,6 +9,19 @@ using ..Meshfree4ScalarEq.FluxFunctions
 
 export functionInterpolation!, gradInterpolation!, setCurvatures!, GradientInterpolator, initTimeStep, UpwindGradient, CentralGradient, WENO, MUSCL, AxelMUSCL, DumbserWENO, MLSWeightFunction, inverseWeightFunction, exponentialWeightFunction, getStencil
 
+"""
+    sortFlux(flux1::Real, flux2::Real, deltaPos::Real)::Tuple{<:Real, <:Real}
+
+Given a reconstruction of the flux at the midpoint from the cell center flux1, and a flux reconstruction from the neighbouring point, return the left and right flux based on the relative orientation of the points.
+"""
+function sortFlux(flux1::Real, flux2::Real, deltaPos::Real)::Tuple{<:Real, <:Real}
+    if deltaPos > 0.0
+        return (flux1, flux2)  # left state, right state
+    else
+        return (flux2, flux1)
+    end
+end
+
 # Weightfunction logic
 abstract type MLSWeightFunction end
 struct exponentialWeightFunction <: MLSWeightFunction end
@@ -217,6 +230,7 @@ struct UpwindGradient{Algorithm} <: GradientInterpolator where {Algorithm <: Upw
     order::Int64
     res::Vector{Float64}
     weightFunction::MLSWeightFunction
+    numericalFlux::NumericalFluxFunction
 
     """
         UpwindGradient(order::Int64 = 1; algType::String = "")
@@ -232,26 +246,25 @@ struct UpwindGradient{Algorithm} <: GradientInterpolator where {Algorithm <: Upw
             size = 5  # In 2D res had length 5, in 1D res has length 2
         end
         if algType == "Classic"
-            new{ClassicAlgorithm}(order, Vector{Float64}(undef, size), weightFunction)
+            new{ClassicAlgorithm}(order, Vector{Float64}(undef, size), weightFunction, UpwindFlux())
         elseif algType == "Praveen"
             @assert order == 1
-            new{PraveenAlgorithm}(order, Vector{Float64}(undef, size), weightFunction)
+            new{PraveenAlgorithm}(order, Vector{Float64}(undef, size), weightFunction, UpwindFlux())
         elseif algType == "Tiwari"
-            new{TiwariAlgorithm}(order, Vector{Float64}(undef, size), weightFunction)
+            new{TiwariAlgorithm}(order, Vector{Float64}(undef, size), weightFunction, UpwindFlux())
         end
     end
 end
 
 function (upwind::UpwindGradient)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, eq::ScalarHyperbolicEquation, settings::SimSetting; setCurvature::Bool=true)::Real
-    vel = velocity(eq, fVec[particleIndex])
-    dxVec = Vector{Float64}(undef, 0)
-    dfVec = Vector{Float64}(undef, 0)
-    for nbIndex in particleGrid.grid[particleIndex].neighbourIndices
+    nbNeighbours = length(particleGrid.grid[particleIndex].neighbourIndices)
+    dxVec = Vector{Float64}(undef, nbNeighbours)
+    dfVec = Vector{Float64}(undef, nbNeighbours)
+    for (index, nbIndex) in enumerate(particleGrid.grid[particleIndex].neighbourIndices)
         deltaPos = getPeriodicDistance(particleGrid, particleIndex, nbIndex)
-        if ((vel >= 0.0) && (deltaPos <= 0.0)) || ((vel <= 0.0) && (deltaPos >= 0.0))
-            push!(dxVec, deltaPos/settings.interpRange)
-            push!(dfVec, fVec[nbIndex] - fVec[particleIndex])
-        end
+        fm, fp = sortFlux(fVec[particleIndex], fVec[nbIndex], deltaPos)
+        dxVec[index] = deltaPos/settings.interpRange
+        dfVec[index] = upwind.numericalFlux(fm, fp, eq) - flux(eq, fVec[particleIndex])
     end
     wVec = upwind.weightFunction(dxVec; param=settings.interpAlpha, normalisation=1.0)
     @assert !any(isnan, wVec) && !any(isinf, wVec) "Infs or Nan's in wVec: $(wVec)"
@@ -261,7 +274,7 @@ function (upwind::UpwindGradient)(particleGrid::ParticleGrid1D, particleIndex::I
     if setCurvature
         particleGrid.grid[particleIndex].curvature = 0.0
     end
-    return vel*upwind.res[1]/settings.interpRange
+    return 2*upwind.res[1]/settings.interpRange
 end
 
 function (upwind::UpwindGradient{TiwariAlgorithm})(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec::Vector{<:Real}, eq::LinearAdvection{Tuple{<:Real, <:Real}}, settings::SimSetting; setCurvature::Bool=true)::Real    
@@ -759,19 +772,6 @@ function initTimeStep(muscl::MUSCL{ORDER}, particleGrid::ParticleGrid1D, interpA
     end
 end
 
-"""
-    sortFlux(flux1::Real, flux2::Real, deltaPos::Real)::Tuple{<:Real, <:Real}
-
-Given a reconstruction of the flux at the midpoint from the cell center flux1, and a flux reconstruction from the neighbouring point, return the left and right flux based on the relative orientation of the points.
-"""
-function sortFlux(flux1::Real, flux2::Real, deltaPos::Real)::Tuple{<:Real, <:Real}
-    if deltaPos > 0.0
-        return (flux1, flux2)  # left state, right state
-    else
-        return (flux2, flux1)
-    end
-end
-
 function (muscl::MUSCL{ORDER})(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, eq::ScalarHyperbolicEquation, settings::SimSetting; setCurvature::Bool=true)::Real where {ORDER<:MUSCLORDER}
     particle = particleGrid.grid[particleIndex]
     div = 0.0
@@ -781,12 +781,10 @@ function (muscl::MUSCL{ORDER})(particleGrid::ParticleGrid1D, particleIndex::Inte
 
         if ORDER == MUSCLORDER1
             # Linear reconstruction from particleIndex and neighbour at center point 
-            if eq.vel*deltaPos > 0.0
-                fij = fVec[particleIndex] + 0.5*deltaPos*sum(particle.alfaij[i]*(fVec[k] - fVec[particleIndex]) for (i, k) in enumerate(particle.neighbourIndices))
-            else
-                fij = fVec[nbIndex] - 0.5*deltaPos*sum(nbParticle.alfaij[i]*(fVec[k] - fVec[nbIndex]) for (i, k) in enumerate(nbParticle.neighbourIndices))
-            end
-            div += particle.alfaij[index]*(fij - fVec[particleIndex])
+            fij = fVec[particleIndex] + 0.5*deltaPos*sum(particle.alfaij[i]*(fVec[k] - fVec[particleIndex]) for (i, k) in enumerate(particle.neighbourIndices))
+            fji = fVec[nbIndex] - 0.5*deltaPos*sum(nbParticle.alfaij[i]*(fVec[k] - fVec[nbIndex]) for (i, k) in enumerate(nbParticle.neighbourIndices))
+            fm, fp = sortFlux(fij, fji, deltaPos)
+            div += particle.alfaij[index]*(muscl.numericalFlux(fm, fp, eq) - flux(eq, fVec[particleIndex]))
         elseif ORDER == MUSCLORDER2
             # Quadratic reconstruction
             fij = fVec[particleIndex]

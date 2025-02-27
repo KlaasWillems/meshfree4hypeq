@@ -3,6 +3,7 @@ using Meshfree4ScalarEq.ParticleGrids
 using Meshfree4ScalarEq.TimeIntegration
 using Meshfree4ScalarEq.Interpolations
 using Meshfree4ScalarEq.SimSettings
+using Meshfree4ScalarEq.FluxFunctions
 using Meshfree4ScalarEq
 
 function smoothInit1(x::Real)
@@ -17,7 +18,7 @@ function shockInit(x::Real)
     return x > 0.0 ? 1.0 : 0.0
 end
 
-function doSimluation(method::String, initFunc::String, randomnessFactor::Real = 1/4)
+function doSimluation(methodString::String, initFunc::String, randomnessFactor::Real = 1/4)
     # Simulation settings
     CFL = 1/5
     tmax = 10.0
@@ -31,12 +32,23 @@ function doSimluation(method::String, initFunc::String, randomnessFactor::Real =
     state = copy(Meshfree4ScalarEq.rng)
 
     # Simlation algorithms
-    if method == "muscl2"
-        method = RalstonRK2(MUSCL(2), N; mood=MOODu1(;deltaRelax=true))
-        saveDir *= "RK2MUSCL2"
-    elseif method == "lf"
+    if methodString == "muscl2RusanovFlux"
+        method = RalstonRK2(MUSCL(2; numericalFlux=RusanovFlux()), N)
+        saveDir *= "muscl2RusanovFlux"
+    elseif methodString == "lf"
         method = LaxFriedrich(N)
         saveDir *= "LF"
+    elseif methodString == "muscl2UpwindFlux"
+        method = RalstonRK2(MUSCL(2; numericalFlux=UpwindFlux()), N)
+        saveDir *= "muscl2UpwindFlux"
+    elseif methodString == "EulerUpwind"
+        method = EulerUpwind(N)
+        saveDir *= "EulerUpwind"
+    elseif methodString == "EulerMUSCL1"
+        method = EulerUpwind(N; gradientInterpolator=MUSCL(1; numericalFlux=UpwindFlux()))
+        saveDir *= "EulerMUSCL1"
+    else
+        error("Wrong method name.")
     end
 
     # Equation
@@ -86,9 +98,18 @@ function doSimluation(method::String, initFunc::String, randomnessFactor::Real =
     copy!(Meshfree4ScalarEq.rng, state)
 end
 
-doSimluation("muscl2", "shockInit")
-doSimluation("muscl2", "smoothInit1")
-doSimluation("muscl2", "smoothInit2")
+doSimluation("EulerMUSCL1", "shockInit")
+doSimluation("EulerMUSCL1", "smoothInit1")
+doSimluation("EulerMUSCL1", "smoothInit2")
+doSimluation("muscl2RusanovFlux", "shockInit")
+doSimluation("muscl2RusanovFlux", "smoothInit1")
+doSimluation("muscl2RusanovFlux", "smoothInit2")
+doSimluation("muscl2UpwindFlux", "shockInit")
+doSimluation("muscl2UpwindFlux", "smoothInit1")
+doSimluation("muscl2UpwindFlux", "smoothInit2")
+doSimluation("EulerUpwind", "shockInit")
+doSimluation("EulerUpwind", "smoothInit1")
+doSimluation("EulerUpwind", "smoothInit2")
 doSimluation("lf", "shockInit", 0)
 doSimluation("lf", "smoothInit1", 0)
 doSimluation("lf", "smoothInit2", 0)

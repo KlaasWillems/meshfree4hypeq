@@ -188,26 +188,27 @@ end
 
 # ------------------------------------------- Time steppers -------------------------------------------
 struct EulerUpwind <: MeshfreeTimeStepper
-    upwind::UpwindGradient
+    gradientInterpolator::GradientInterpolator
     rhoOld::Vector{Float64}
-    function EulerUpwind(Nx::Integer; order::Int64 = 1, weightFunction = exponentialWeightFunction())
-        new(UpwindGradient(order; weightFunction=weightFunction), Vector{Float64}(undef, Nx))
+    function EulerUpwind(Nx::Integer; weightFunction = exponentialWeightFunction(), gradientInterpolator::GradientInterpolator = UpwindGradient(1; weightFunction))
+        new(gradientInterpolator, Vector{Float64}(undef, Nx))
     end
-    function EulerUpwind(Nx::Integer, Ny::Integer; order::Int64 = 1, algType::String = "Classic", weightFunction = exponentialWeightFunction()) 
-        new(UpwindGradient(order; algType=algType, weightFunction=weightFunction), Vector{Float64}(undef, Nx*Ny))
+    function EulerUpwind(Nx::Integer, Ny::Integer; algType::String = "Classic", weightFunction = exponentialWeightFunction()) 
+        new(UpwindGradient(1; algType=algType, weightFunction=weightFunction), Vector{Float64}(undef, Nx*Ny))
     end
 end
 
 function (euler::EulerUpwind)(eq::ScalarHyperbolicEquation, particleGrid::ParticleGrid, settings::SimSetting, time::Real, dt::Real)
     map!(particle -> particle.rho, euler.rhoOld, particleGrid.grid)
+    initTimeStep(euler.gradientInterpolator, particleGrid, settings.interpAlpha, settings.interpRange)
     for (particleIndex, particle) in enumerate(particleGrid.grid)
-        div = euler.upwind(particleGrid, particleIndex, euler.rhoOld, eq, settings)
+        div = euler.gradientInterpolator(particleGrid, particleIndex, euler.rhoOld, eq, settings)
         particle.rho = particle.rho - div*dt
     end
 end
 
 function initTimeStepper(euler::EulerUpwind, particleGrid::ParticleGrid, settings::SimSetting)
-    initTimeStep(euler.upwind, particleGrid, settings.interpAlpha, settings.interpRange)
+    initTimeStep(euler.gradientInterpolator, particleGrid, settings.interpAlpha, settings.interpRange)
 end
 
 struct RK3{G1 <: GradientInterpolator, G2 <: GradientInterpolator, MOOD <: MOODCriterion} <: MeshfreeTimeStepper
