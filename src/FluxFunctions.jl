@@ -22,8 +22,8 @@ struct UpwindFlux <: NumericalFluxFunction end
 function (upwind::UpwindFlux)(leftState::Real, rightState::Real, eq::ScalarHyperbolicEquation)
     leftFlux = flux(eq, leftState)
     rightFlux = flux(eq, rightState)
-    a = (leftFlux - rightFlux)/(leftState - rightState)
-    return 0.5*(leftFlux + rightFlux - a*(rightState - leftState))
+    a = leftState == rightState ?  velocity(eq, leftState) : (leftFlux - rightFlux)/(leftState - rightState)
+    return 0.5*(leftFlux + rightFlux - abs(a)*(rightState - leftState))
 end
 
 end
