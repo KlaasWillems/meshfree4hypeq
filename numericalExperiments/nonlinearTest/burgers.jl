@@ -15,7 +15,11 @@ function smoothInit2(x::Real)
 end
 
 function shockInit(x::Real)
-    return x > 0.0 ? 1.0 : 0.0
+    if x > 0.0
+        return 1.0
+    else
+        return -1.0
+    end
 end
 
 function doSimluation(methodString::String, initFunc::String, randomnessFactor::Real = 1/4)

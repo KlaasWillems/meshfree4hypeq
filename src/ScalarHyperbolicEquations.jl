@@ -30,9 +30,14 @@ end
     return eq.vel
 end
 
-@inline function flux(eq::LinearAdvection, u::Real)
+@inline function flux(eq::LinearAdvection{T}, u::Real) where {T <: Real}
     return eq.vel*u
 end
+
+@inline function flux(eq::LinearAdvection{T}, u::Real) where {T <: Tuple{<:Real, <:Real}}
+    return (eq.vel[1]*u, eq.vel[2]*u)
+end
+
 
 struct BurgersEquation <: NonLinearScalarHyperbolicEquation end
 

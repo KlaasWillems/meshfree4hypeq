@@ -74,6 +74,9 @@ function doSimluation(initFunc::String, AlgID::Integer, N::Integer, tmax::Real)
     elseif AlgID == 10
         method = RK3(MUSCL(2), N, N; mood=MOODu2(deltaRelax=true))  # MUSCL with quadratic reconstruction
         saveDir *= "RK3MOODMUSCL2"
+    elseif AlgID == 11
+        method = EulerUpwind(N, N; algType="NonLinearPraveen")
+        saveDir *= "NonLinearPraveen"
     end
 
     saveDir *= "_irgrid"
@@ -135,7 +138,7 @@ function checkError()
 
     tmax = 1.0
     Ns = [30; 50; 70; 100; 175; 250]
-    Algs = [1; 4; 5; 6; 7; 8; 10]
+    Algs = [11]
     
     params = [(initString, initFunc, Alg, N, tmax) for N in Ns for Alg in Algs]
     pmapRes = pmap(computeSimulationError, params)
