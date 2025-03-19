@@ -15,7 +15,7 @@ function smoothInit2(x::Real)
 end
 
 function shockInit(x::Real)
-    if x > 0.0
+    if x > 1.0
         return 0.5
     else
         return 1.5
@@ -25,9 +25,9 @@ end
 function doSimluation(methodString::String, initFunc::String, N::Int, randomnessFactor::Real = 1/4)
     # Simulation settings
     CFL = 1/5
-    tmax = 3.0
-    xmin = -1
-    xmax = 9
+    tmax = 7.5
+    xmin = 0
+    xmax = 10
     saveDir = "$(@__DIR__)/data/"
     interpAlpha = 1.0
     saveFreq = convert(Int64,1e10)
@@ -36,8 +36,11 @@ function doSimluation(methodString::String, initFunc::String, N::Int, randomness
 
     # Simlation algorithms
     if methodString == "muscl2RusanovFluxMOOD"
-        method = RalstonRK2(MUSCL(2; numericalFlux=RusanovFlux()), N; mood=MOODu2(deltaRelax=true))
+        method = RalstonRK2(MUSCL(2; numericalFlux=RusanovFlux()), N; mood=MOODu1(deltaRelax=false))
         saveDir *= "muscl2RusanovFluxMOOD"
+    elseif methodString == "muscl4RusanovFluxMOOD"
+        method = RalstonRK2(MUSCL(4; numericalFlux=RusanovFlux()), N; mood=MOODu1(deltaRelax=false))
+        saveDir *= "muscl4RusanovFluxMOOD"
     elseif methodString == "muscl2RusanovFlux"
         method = RalstonRK2(MUSCL(2; numericalFlux=RusanovFlux()), N)
         saveDir *= "muscl2RusanovFlux"
@@ -100,9 +103,7 @@ function doSimluation(methodString::String, initFunc::String, N::Int, randomness
 end
 
 # doSimluation("LF", "shockInit", 500, 0)
-doSimluation("muscl2RusanovFlux", "shockInit", 80, 1/4)
-doSimluation("muscl2RusanovFlux", "shockInit", 160, 1/4)
-doSimluation("muscl2RusanovFlux", "shockInit", 250, 1/4)
-doSimluation("muscl2RusanovFluxMOOD", "shockInit", 80, 1/4)
-doSimluation("muscl2RusanovFluxMOOD", "shockInit", 160, 1/4)
 doSimluation("muscl2RusanovFluxMOOD", "shockInit", 250, 1/4)
+doSimluation("muscl2RusanovFlux", "shockInit", 250, 1/4)
+doSimluation("EulerUpwind", "shockInit", 250, 1/4)
+doSimluation("muscl4RusanovFluxMOOD", "shockInit", 250, 1/4)
