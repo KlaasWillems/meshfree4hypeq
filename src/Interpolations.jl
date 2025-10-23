@@ -240,7 +240,7 @@ struct UpwindGradient{Algorithm} <: GradientInterpolator where {Algorithm <: Upw
     end
 end
 
-function (upwind::UpwindGradient)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, vel::Real, settings::SimSetting; setCurvature::Bool=true)::Real
+function (upwind::UpwindGradient)(particleGrid::ParticleGrid1D{BF}, particleIndex::Integer, fVec::Vector{<:Real}, vel::Real, settings::SimSetting; setCurvature::Bool=true)::Real where {BF}
     dxVec = Vector{Float64}(undef, 0)
     dfVec = Vector{Float64}(undef, 0)
     for nbIndex in particleGrid.grid[particleIndex].neighbourIndices
@@ -253,12 +253,16 @@ function (upwind::UpwindGradient)(particleGrid::ParticleGrid1D, particleIndex::I
     wVec = upwind.weightFunction(dxVec; param=settings.interpAlpha, normalisation=1.0)
     @assert !any(isnan, wVec) && !any(isinf, wVec) "Infs or Nan's in wVec: $(wVec)"
 
-    gradInterpolation!(dxVec, wVec, dfVec, upwind.res; order=upwind.order)
-
-    if setCurvature
-        particleGrid.grid[particleIndex].curvature = 0.0
+    if !((BF == 1) || (BF == 2) && (particleIndex == 1 || particleIndex == length(particleGrid.grid)))
+        gradInterpolation!(dxVec, wVec, dfVec, upwind.res; order=upwind.order)
+        if setCurvature
+            particleGrid.grid[particleIndex].curvature = 0.0
+        end
+        return vel*upwind.res[1]/settings.interpRange
+    else
+        return 0.0
     end
-    return vel*upwind.res[1]/settings.interpRange
+
 end
 
 function (upwind::UpwindGradient{TiwariAlgorithm})(particleGrid::ParticleGrid2D, particleIndex::Integer, fVec::Vector{<:Real}, vel::Tuple{Real, Real}, settings::SimSetting; setCurvature::Bool=true)::Real    
@@ -412,7 +416,7 @@ function (central::CentralGradient)(particleGrid::ParticleGrid2D, particleIndex:
     return vel[1]*central.res[1]/particleGrid.dx + vel[2]*central.res[2]/particleGrid.dx
 end
 
-function (central::CentralGradient)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, vel::Real, settings::SimSetting; setCurvature::Bool=true)::Real
+function (central::CentralGradient)(particleGrid::ParticleGrid1D{BF}, particleIndex::Integer, fVec::Vector{<:Real}, vel::Real, settings::SimSetting; setCurvature::Bool=true)::Real where {BF}
     Npts = length(particleGrid.grid[particleIndex].neighbourIndices)
     dxVec = Vector{Float64}(undef, Npts)
     dfVec = Vector{Float64}(undef, Npts)
@@ -453,7 +457,7 @@ struct WENO <: GradientInterpolator
     end
 end
 
-function (weno::WENO)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, vel::Real, settings::SimSetting; setCurvature::Bool=true)::Real
+function (weno::WENO)(particleGrid::ParticleGrid1D{BF}, particleIndex::Integer, fVec::Vector{<:Real}, vel::Real, settings::SimSetting; setCurvature::Bool=true)::Real where {BF}
     Npts = length(particleGrid.grid[particleIndex].neighbourIndices)
     dxVec = Vector{Float64}(undef, Npts)
     dfVec = Vector{Float64}(undef, Npts)
@@ -470,10 +474,21 @@ function (weno::WENO)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec
     # One-sided stencil
     if vel > 0.0
         # Left stencil
-        gradInterpolation!(dxVec[leftWindow], wVec[leftWindow], dfVec[leftWindow], weno.res; order=weno.order)
+        if sum(leftWindow) > 1
+            gradInterpolation!(dxVec[leftWindow], wVec[leftWindow], dfVec[leftWindow], weno.res; order=weno.order)
+        else
+            weno.res[1] = 10000.0 # force values of derivatives to be large so that the central stencil is chosen
+            weno.res[2] = 10000.0
+        end
+
     else
         # Right stencil
-        gradInterpolation!(dxVec[.!leftWindow], wVec[.!leftWindow], dfVec[.!leftWindow], weno.res; order=weno.order)
+        if sum(.!leftWindow) > 1
+            gradInterpolation!(dxVec[.!leftWindow], wVec[.!leftWindow], dfVec[.!leftWindow], weno.res; order=weno.order)
+        else
+            weno.res[1] = 10000.0
+            weno.res[2] = 10000.0
+        end
     end
     resS1 = weno.res[1]
     resS2 = weno.res[2]
@@ -678,7 +693,7 @@ mutable struct MUSCL <: GradientInterpolator
     end
 end
 
-function initTimeStep(muscl::MUSCL, particleGrid::ParticleGrid1D, interpAlpha::Real, interpRange::Real)
+function initTimeStep(muscl::MUSCL, particleGrid::ParticleGrid1D{BF}, interpAlpha::Real, interpRange::Real) where {BF}
     # Compute reconstruction for particle in each neighbourhood and store gradient coefficients
     for (particleIndex, particle) in enumerate(particleGrid.grid)
 
@@ -740,7 +755,7 @@ function initTimeStep(muscl::MUSCL, particleGrid::ParticleGrid1D, interpAlpha::R
     end
 end
 
-function (muscl::MUSCL)(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{<:Real}, vel::Real, settings::SimSetting; setCurvature::Bool=true)::Real
+function (muscl::MUSCL)(particleGrid::ParticleGrid1D{BF}, particleIndex::Integer, fVec::Vector{<:Real}, vel::Real, settings::SimSetting; setCurvature::Bool=true)::Real where{BF}
     particle = particleGrid.grid[particleIndex]
     div = 0.0
     for (index, nbIndex) in enumerate(particleGrid.grid[particleIndex].neighbourIndices)
@@ -999,7 +1014,7 @@ end
 
 Compute curvatures on whole grid using a central MLS method. Overwrites the particleGrid.temp vector.
 """
-function setCurvatures!(particleGrid::ParticleGrid1D, settings::SimSetting)
+function setCurvatures!(particleGrid::ParticleGrid1D{BF}, settings::SimSetting) where {BF}
     central = CentralGradient(2)
     map!(particle -> particle.rho, particleGrid.temp, particleGrid.grid)
     for particleIndex in eachindex(particleGrid.grid)

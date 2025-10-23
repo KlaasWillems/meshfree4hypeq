@@ -70,7 +70,7 @@ mutable struct MOODLoubertU2 <: MOODCriterion
     end
 end
 
-function (mood::MOODLoubertU2)(particleGrid::ParticleGrid1D, particleIndex::Integer, rhoVec::Vector{<:Real}, newRho::Real; firstStage::Bool=false)::Bool
+function (mood::MOODLoubertU2)(particleGrid::ParticleGrid1D{BF}, particleIndex::Integer, rhoVec::Vector{<:Real}, newRho::Real; firstStage::Bool=false)::Bool where {BF}
     # Prep
     minU, maxU = findLocalExtrema!(particleGrid, particleIndex, rhoVec)
     d = maximum((particle.volume for particle in particleGrid.grid))
@@ -127,10 +127,10 @@ function (mood::MOODu2)(particleGrid::ParticleGridType, particleIndex::Integer, 
     DMPFail = DMPFail && (abs(maxU - minU) < mood.delta^3) ? false : DMPFail
     
     # u2 check
-    if ParticleGridType == ParticleGrid1D
+    if (ParticleGridType == ParticleGrid1D{0}) || (ParticleGridType == ParticleGrid1D{1}) || (ParticleGridType == ParticleGrid1D{2})
         mini, maxi, minxx, maxxx = findLocalExtremaAbs!(particleGrid, particleIndex, particleGrid.temp)  # particleGrid.temp contains the curvatures
         u2 = (mini*maxi > -mood.delta) && ((minxx/maxxx >= 1.0 - (minxx/maxxx)^(1/1)) || (maxxx < mood.delta)) # True if criterion is satisfied, so no MOOD event
-    elseif ParticleGridType == ParticleGrid2D
+    elseif ParticleGridType isa ParticleGrid2D
         mini1, maxi1, minxx1, maxxx1, mini2, maxi2, minxx2, maxxx2 = findLocalExtremaAbs!(particleGrid, particleIndex, particleGrid.temp)  # particleGrid.temp contains the curvatures
         u2x = (mini1*maxi1 > -mood.delta) && ((minxx1/maxxx1 >= 1/2) || (maxxx1 < mood.delta))
         u2y = (mini2*maxi2 > -mood.delta) && ((minxx2/maxxx2 >= 1/2) || (maxxx2 < mood.delta))
@@ -159,13 +159,33 @@ Copies the curvatures of all particles in the grid to particleGrid.temp. This is
 
 """
 function copyCurvatures!(particleGrid::ParticleGridType) where {ParticleGridType <: ParticleGrid}
-    if ParticleGridType == ParticleGrid1D
+    if particleGrid isa ParticleGrid1D
         map!(particle -> particle.curvature, particleGrid.temp, particleGrid.grid)
-    elseif ParticleGridType == ParticleGrid2D
+    elseif particleGrid isa ParticleGrid2D
         for (i, particle) in enumerate(particleGrid.grid)
             particleGrid.temp[i, 1] = particle.curvature[1]
             particleGrid.temp[i, 2] = particle.curvature[2]
         end
+    end
+end
+
+"""
+    setBoundaryCondition(particleGrid::ParticleGrid, particle, particleIndex)
+
+Set the boundary condition in case the grid is non-periodic
+"""
+function setBoundaryCondition!(particleGrid::ParticleGrid, particle, particleIndex, settings)
+end
+
+function setBoundaryCondition!(particleGrid::ParticleGrid1D{1}, particle, particleIndex, settings)
+    if particleIndex == 1
+        particle.rho = settings.boundaryValue
+    end
+end
+
+function setBoundaryCondition!(particleGrid::ParticleGrid1D{2}, particle, particleIndex, settings)
+    if particleIndex == length(particleGrid.grid)
+        particle.rho = settings.boundaryValue
     end
 end
 
@@ -203,6 +223,7 @@ function (euler::EulerUpwind)(eq::ScalarHyperbolicEquation, particleGrid::Partic
     for (particleIndex, particle) in enumerate(particleGrid.grid)
         div = euler.upwind(particleGrid, particleIndex, euler.rhoOld, eq.vel, settings)
         particle.rho = particle.rho - div*dt
+        setBoundaryCondition!(particleGrid, particle, particleIndex, settings)
     end
 end
 
@@ -244,6 +265,7 @@ function (rk3::RK3)(eq::LinearAdvection, particleGrid::ParticleGrid, settings::S
             rk3.div1[particleIndex] = rk3.fallbackInterpolator(particleGrid, particleIndex, rk3.rhoInit, eq.vel, settings; setCurvature=false)
             particle.rho = rk3.rhoInit[particleIndex] - rk3.div1[particleIndex]*dt/2  
         end
+        setBoundaryCondition!(particleGrid, particle, particleIndex, settings)
     end
 
     # Stage 3
@@ -256,6 +278,7 @@ function (rk3::RK3)(eq::LinearAdvection, particleGrid::ParticleGrid, settings::S
             rk3.div2[particleIndex] = rk3.fallbackInterpolator(particleGrid, particleIndex, rk3.rhos, eq.vel, settings; setCurvature=false)
             particle.rho = rk3.rhos[particleIndex] - dt*rk3.div2[particleIndex]  # FE step from previous stage
         end
+        setBoundaryCondition!(particleGrid, particle, particleIndex, settings)
     end
 
     # Final solution
@@ -267,6 +290,7 @@ function (rk3::RK3)(eq::LinearAdvection, particleGrid::ParticleGrid, settings::S
         if rk3.mood(particleGrid, particleIndex, rk3.rhos, particle.rho)
             particle.rho = rk3.rhos[particleIndex]  # FE step from previous stage, but the previous stage is also the solution at final time (c_3 = 1.0). 
         end
+        setBoundaryCondition!(particleGrid, particle, particleIndex, settings)
     end
 end
 
@@ -301,6 +325,7 @@ function (ralston::RalstonRK2)(eq::ScalarHyperbolicEquation, particleGrid::Parti
             ralston.div1[particleIndex] = ralston.fallbackInterpolator(particleGrid, particleIndex, ralston.rhoInit, eq.vel, settings; setCurvature=false)
             particle.rho = ralston.rhoInit[particleIndex] - ralston.div1[particleIndex]*dt*2/3
         end
+        setBoundaryCondition!(particleGrid, particle, particleIndex, settings)
     end
 
     # Final stage
@@ -313,6 +338,7 @@ function (ralston::RalstonRK2)(eq::ScalarHyperbolicEquation, particleGrid::Parti
             div = ralston.fallbackInterpolator(particleGrid, particleIndex, ralston.rhos, eq.vel, settings; setCurvature=false)
             particle.rho = ralston.rhos[particleIndex] - dt*div/3
         end
+        setBoundaryCondition!(particleGrid, particle, particleIndex, settings)
     end
 end
 
@@ -351,6 +377,7 @@ function (rk4::RK4)(eq::LinearAdvection, particleGrid::ParticleGrid, settings::S
             rk4.div1[particleIndex] = rk4.fallbackInterpolator(particleGrid, particleIndex, rk4.rhoInit, eq.vel, settings; setCurvature=false)
             particle.rho = rk4.rhoInit[particleIndex] - rk4.div1[particleIndex]*dt/2  
         end
+        setBoundaryCondition!(particleGrid, particle, particleIndex, settings)
     end
 
     # Stage 3
@@ -363,6 +390,7 @@ function (rk4::RK4)(eq::LinearAdvection, particleGrid::ParticleGrid, settings::S
             rk4.div2[particleIndex] = rk4.fallbackInterpolator(particleGrid, particleIndex, rk4.rhos, eq.vel, settings; setCurvature=false)
             particle.rho = rk4.rhoInit[particleIndex] - dt*rk4.div2[particleIndex]/2  
         end
+        setBoundaryCondition!(particleGrid, particle, particleIndex, settings)
     end
 
     # Stage 3
@@ -375,6 +403,7 @@ function (rk4::RK4)(eq::LinearAdvection, particleGrid::ParticleGrid, settings::S
             rk4.div3[particleIndex] = rk4.fallbackInterpolator(particleGrid, particleIndex, rk4.rhos, eq.vel, settings; setCurvature=false)
             particle.rho = rk4.rhoInit[particleIndex] - dt*rk4.div3[particleIndex]
         end
+        setBoundaryCondition!(particleGrid, particle, particleIndex, settings)
     end
 
     # Final solution
@@ -386,5 +415,6 @@ function (rk4::RK4)(eq::LinearAdvection, particleGrid::ParticleGrid, settings::S
         if rk4.mood(particleGrid, particleIndex, rk4.rhos, particle.rho)
             particle.rho = rk4.rhos[particleIndex]  # Final stage is a solution at t^n+1 that satisfies the DMP
         end
+        setBoundaryCondition!(particleGrid, particle, particleIndex, settings)
     end
 end

@@ -5,7 +5,7 @@ struct Upwind <: FixedGridTimeStepper
     end
 end
 
-function (upwind::Upwind)(eq::LinearAdvection, particleGrid::ParticleGrid1D, settings::SimSetting, time::Real, dt::Real)
+function (upwind::Upwind)(eq::LinearAdvection, particleGrid::ParticleGrid1D{BF}, settings::SimSetting, time::Real, dt::Real) where {BF}
     map!(particle -> particle.rho, upwind.rhoOld, particleGrid.grid)
     vel = velocity(eq, particleGrid.grid[1].rho, particleGrid.grid[1].pos, time)  # Velocity is constant so just evaluate it at the first particle
     λ = vel*dt/particleGrid.dx
@@ -22,7 +22,7 @@ function (upwind::Upwind)(eq::LinearAdvection, particleGrid::ParticleGrid1D, set
     end
 end
 
-function (upwind::Upwind)(eq::ScalarHyperbolicEquation, particleGrid::ParticleGrid1D, settings::SimSetting, time::Real, dt::Real)
+function (upwind::Upwind)(eq::ScalarHyperbolicEquation, particleGrid::ParticleGrid1D{BF}, settings::SimSetting, time::Real, dt::Real) where {BF}
     error("Upwind method for nonlinear hyperbolic equations (Roe's scheme) not yet implemented.")
 end
 
@@ -33,7 +33,7 @@ struct LaxFriedrich <: FixedGridTimeStepper
     end
 end
 
-function (lf::LaxFriedrich)(eq::ScalarHyperbolicEquation, particleGrid::ParticleGrid1D, settings::SimSetting, time::Real, dt::Real)
+function (lf::LaxFriedrich)(eq::ScalarHyperbolicEquation, particleGrid::ParticleGrid1D{BF}, settings::SimSetting, time::Real, dt::Real) where {BF}
     map!(particle -> particle.rho, lf.rhoOld, particleGrid.grid)
     λ = dt/(2*particleGrid.dx)
     for i in 2:particleGrid.N-1

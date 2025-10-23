@@ -22,15 +22,16 @@ mutable struct SimSetting
     const interpAlpha::Float64
     const saveDir::String
     const saveFreq::UInt64
+    const boundaryValue::Float64
     currentSaveNb::UInt64
 
-    function SimSetting(; tmax::Real, dt::Real, interpRange::Real, interpAlpha::Real, saveDir::String, saveFreq::Integer, organiseFiles::Bool=true)
+    function SimSetting(; tmax::Real, dt::Real, interpRange::Real, interpAlpha::Real, saveDir::String, saveFreq::Integer, organiseFiles::Bool=true, boundaryValue::Float64=0.0)
         @assert endswith(saveDir, "/")
         if organiseFiles
             _generateDir(saveDir)
             _cleanDir(saveDir)
         end
-        new(convert(Float64, tmax), convert(Float64, dt), convert(Float64, interpRange), convert(Float64, interpAlpha), saveDir, convert(UInt64, saveFreq), UInt64(0))
+        new(convert(Float64, tmax), convert(Float64, dt), convert(Float64, interpRange), convert(Float64, interpAlpha), saveDir, convert(UInt64, saveFreq), UInt64(0), boundaryValue)
     end
 end
 

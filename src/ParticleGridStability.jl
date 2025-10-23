@@ -12,7 +12,7 @@ export computeODE
 
 Compute linearised system for some spatial discretisations for the linear advection equations.
 """
-function computeODE(particleGrid::ParticleGrid1D, vel::Real, alpha::Real, interpRange::Real, algorithm::String, order::Int64, weightFunction=exponentialWeightFunction())
+function computeODE(particleGrid::ParticleGrid1D{BF}, vel::Real, alpha::Real, interpRange::Real, algorithm::String, order::Int64, weightFunction=exponentialWeightFunction()) where {BF}
     @assert algorithm in ["upwind", "central", "muscl"] "Algorithm not supported."
 
     # Some required variables

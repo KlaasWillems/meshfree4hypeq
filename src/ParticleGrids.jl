@@ -18,7 +18,7 @@ export gridToLinearIndex, linearIndexToGrid, findNeighbouringVoxels, updateNeigh
 
 abstract type ParticleGrid end
 
-struct ParticleGrid1D <: ParticleGrid
+struct ParticleGrid1D{BoundaryFlag} <: ParticleGrid
     grid::Vector{Particle1D}  # Vector containing Particle objects
     xmin::Float64  # Min & max of domain. Periodic domain is assumed. Only a particle at xmin is stored.
     xmax::Float64
@@ -37,7 +37,14 @@ struct ParticleGrid1D <: ParticleGrid
     -   A unstructured grid can also be created by setting randomnes to something negative. In that case, the grid is created by sorting rand(N) numbers between xmin and xmax.
     -   If singlePointPerturbation = true, the randomness is a perturbation of the center point.
     """
-    function ParticleGrid1D(xmin::Real, xmax::Real, N::Integer; randomness::Real = 0.0, rng = Meshfree4ScalarEq.rng, singlePointPerturbation::Bool=false)
+    function ParticleGrid1D(
+            xmin::Real, 
+            xmax::Real, 
+            N::Integer; 
+            randomness::Real = 0.0, 
+            rng = Meshfree4ScalarEq.rng, 
+            singlePointPerturbation::Bool=false, 
+            BoundaryFlag::Int = 0) # Zero for periodic domain, 1 for left Dirichlet boundary, 2 for right Dirichlet boundary
         @assert N >= 2
         @assert xmax > xmin
         dx = (xmax-xmin)/N
@@ -88,7 +95,7 @@ struct ParticleGrid1D <: ParticleGrid
             particle.volume = (deltaPosL + deltaPosR)/2
         end
 
-        new(grid, convert(Float64, xmin), convert(Float64, xmax), convert(Int64, N), dx, regular, Vector{Float64}(undef, N))
+        new{BoundaryFlag}(grid, convert(Float64, xmin), convert(Float64, xmax), convert(Int64, N), dx, regular, Vector{Float64}(undef, N))
     end
 
     """
@@ -96,11 +103,11 @@ struct ParticleGrid1D <: ParticleGrid
     
     The default constructor. 
     """
-    function ParticleGrid1D(grid::Vector{Particle1D}, xmin::Real, xmax::Real, dx::Real, regular::Bool)
+    function ParticleGrid1D(grid::Vector{Particle1D}, xmin::Real, xmax::Real, dx::Real, regular::Bool, BoundaryFlag::Int = 0)
         @assert length(grid) >= 2
         @assert issorted(grid, by=particle->particle.pos) "Grid is not sorted."
         @assert count(map(particle -> particle.boundary, grid)) == 1 "Only the leftmost particle is allowed to be a boundary particle."
-        new(grid, convert(Float64, xmin), convert(Float64, xmax), length(grid), convert(Float64, dx), regular, Vector{Float64}(undef, length(grid)))
+        new{BoundaryFlag}(grid, convert(Float64, xmin), convert(Float64, xmax), length(grid), convert(Float64, dx), regular, Vector{Float64}(undef, length(grid)))
     end
 end
 
@@ -167,7 +174,7 @@ end
 
 Return the maximum time step for which the first-order euler & upwind method is a positive scheme (for linear advection equation).
 """
-function getTimeStep(particleGrid::ParticleGrid1D, eq::LinearAdvection, interpAlpha::Real, interpRange::Real)
+function getTimeStep(particleGrid::ParticleGrid1D{BF}, eq::LinearAdvection, interpAlpha::Real, interpRange::Real) where {BF}
     dtMax = Inf
     updateNeighbours!(particleGrid, interpRange)
     for (particleIndex, particle) in enumerate(particleGrid.grid)
@@ -235,7 +242,7 @@ end
 
 Given initFunc, a function that takes a Real number and returns the initial value at that point, this function will populate paricleGrid.grid[i].rho.
 """
-function setInitialConditions!(particleGrid::ParticleGrid1D, initFunc::Function)
+function setInitialConditions!(particleGrid::ParticleGrid1D{BF}, initFunc::Function) where {BF}
     for i in eachindex(particleGrid.grid)
         particleGrid.grid[i].rho = initFunc(particleGrid.grid[i].pos)
     end
@@ -259,10 +266,14 @@ end
 Return the distance from particleIndex to nbParticle taking into account that particles can be neighbours accros the periodic boundary.
 If nbParticle is to the right of particleIndex, the distance is postive, and vice versa.
 """
-function getPeriodicDistance(particleGrid::ParticleGrid1D, particleIndex::Integer, nbParticle::Integer)
+function getPeriodicDistance(particleGrid::ParticleGrid1D{0}, particleIndex::Integer, nbParticle::Integer)
     domainSize = particleGrid.xmax - particleGrid.xmin
     dist = particleGrid.grid[nbParticle].pos - particleGrid.grid[particleIndex].pos
     return dist - round(dist/domainSize)*domainSize
+end
+
+function getPeriodicDistance(particleGrid::ParticleGrid1D{BF}, particleIndex::Integer, nbParticle::Integer) where {BF}
+    return particleGrid.grid[nbParticle].pos - particleGrid.grid[particleIndex].pos
 end
 
 """
@@ -278,15 +289,13 @@ function getPeriodicDistance(particleGrid::ParticleGrid2D, particleIndex::Intege
     return (distX - round(distX/domainSizeX)*domainSizeX, distY - round(distY/domainSizeY)*domainSizeY)
 end
 
-function getEuclideanDistance(particleGrid::ParticleGridType, particleIndex::Integer, nbParticle::Integer) where {ParticleGridType <: ParticleGrid}
-    if ParticleGridType == ParticleGrid1D
-        return abs(getPeriodicDistance(particleGrid, particleIndex, nbParticle))
-    elseif ParticleGridType == ParticleGrid2D
-        dx, dy = getPeriodicDistance(particleGrid, particleIndex, nbParticle)
-        return sqrt(dx^2 + dy^2)
-    else
-        error("Not implemented.")
-    end
+function getEuclideanDistance(particleGrid::ParticleGrid1D{BF}, particleIndex::Integer, nbParticle::Integer) where {BF}
+    return abs(getPeriodicDistance(particleGrid, particleIndex, nbParticle))
+end
+
+function getEuclideanDistance(particleGrid::ParticleGrid2D, particleIndex::Integer, nbParticle::Integer)
+    dx, dy = getPeriodicDistance(particleGrid, particleIndex, nbParticle)
+    return sqrt(dx^2 + dy^2)
 end
 
 """
@@ -294,7 +303,7 @@ end
 
 For each particle, find the other particles within a distance maxDist and add them to neighbourIndices.
 """
-function updateNeighbours!(particleGrid::ParticleGrid1D, maxDist::Real)
+function updateNeighbours!(particleGrid::ParticleGrid1D{BF}, maxDist::Real) where {BF}
     for particleIndex in eachindex(particleGrid.grid)
         particle = particleGrid.grid[particleIndex]
         empty!(particle.neighbourIndices)
@@ -460,7 +469,7 @@ function findLocalExtrema!(particleGrid::ParticleGrid, particleIndex::Integer, f
     return (mini, maxi)
 end
 
-function findLocalExtremaAbs!(particleGrid::ParticleGrid1D, particleIndex::Integer, fVec::Vector{Float64})::Tuple{Float64, Float64, Float64, Float64}
+function findLocalExtremaAbs!(particleGrid::ParticleGrid1D{BF}, particleIndex::Integer, fVec::Vector{Float64})::Tuple{Float64, Float64, Float64, Float64} where {BF}
     mini = fVec[particleIndex]
     maxi = fVec[particleIndex]
     minAbs = abs(fVec[particleIndex])
