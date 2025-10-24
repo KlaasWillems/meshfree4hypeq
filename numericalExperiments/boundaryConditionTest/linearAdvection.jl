@@ -103,7 +103,7 @@ function doSimluation(regular::Bool, initFunc::String, AlgID::Integer)
                             interpAlpha=interpAlpha,
                             saveDir=saveDir*"/", 
                             saveFreq=saveFreq, 
-                            boundaryValue=0.0)
+                            boundaryValue=0.5)
 
     # Do simulation
     mainTimeIntegrator!(method, eq, particleGrid, settings)

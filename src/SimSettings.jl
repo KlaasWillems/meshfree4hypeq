@@ -31,7 +31,7 @@ mutable struct SimSetting
             _generateDir(saveDir)
             _cleanDir(saveDir)
         end
-        new(convert(Float64, tmax), convert(Float64, dt), convert(Float64, interpRange), convert(Float64, interpAlpha), saveDir, convert(UInt64, saveFreq), UInt64(0), boundaryValue)
+        new(convert(Float64, tmax), convert(Float64, dt), convert(Float64, interpRange), convert(Float64, interpAlpha), saveDir, convert(UInt64, saveFreq), boundaryValue, UInt64(0))
     end
 end
 
