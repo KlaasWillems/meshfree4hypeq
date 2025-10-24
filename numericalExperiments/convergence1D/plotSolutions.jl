@@ -63,7 +63,7 @@ function plotSolutions(init::String)
     xsRegularT = xsRegular .- a*tmax  
     xsRegularT = mapGrid(xsRegularT; xmin=particleGrid.xmin, xmax=particleGrid.xmax)
     exactSolT = initFunc.(xsRegularT)  # Exact solution at t = tmax
-    plot!(p, xsRegular, exactSolT, label="Exact solution", xlabel="x", ylabel=L"\rho", c=:blue)
+    plot!(p, xsRegular, exactSolT, label="Exact solution", xlabel="x", ylabel="u", c=:blue)
     
     # Plot MUSCL 4
     d = load("$(@__DIR__)/data/$(algList[1])/data/step1.jld2")
@@ -77,14 +77,14 @@ function plotSolutions(init::String)
     particleGrid2 = d["particleGrid"]
     rhos2 = map(particle -> particle.rho, particleGrid2.grid)
     pos2 = map(particle -> particle.pos, particleGrid2.grid)
-    plot!(p, pos2, rhos2, xlabel="x", ylabel=L"\rho", label="MUSCL + MOOD: order 2", c=:gold3, ls=:dashdot)
+    plot!(p, pos2, rhos2, xlabel="x", ylabel="u", label="MUSCL + MOOD: order 2", c=:gold3, ls=:dashdot)
     
     # Plot WENO 2
     d = load("$(@__DIR__)/data/$(algList[3])/data/step1.jld2")
     particleGrid3 = d["particleGrid"]
     rhos3 = map(particle -> particle.rho, particleGrid3.grid)
     pos3 = map(particle -> particle.pos, particleGrid3.grid)
-    plot!(p, pos3, rhos3, xlabel="x", ylabel=L"\rho", label="WENO: order 2", c=:green, ls=:dashdotdot)
+    plot!(p, pos3, rhos3, xlabel="x", ylabel="u", label="WENO: order 2", c=:green, ls=:dashdotdot)
     
     # Plot MOOD Events
     plot!(p, [pos2[i] for i in eachindex(pos2) if particleGrid2.grid[i].moodEvent], [rhos2[i] for i in eachindex(pos2) if particleGrid2.grid[i].moodEvent], label="", markershape=:star5, lt=:scatter, c=:gold3, ms=ms)
